@@ -51,3 +51,10 @@ export function battleErrorText(e: 'A_NOT_ELIGIBLE' | 'B_NOT_ELIGIBLE' | 'SAME_G
 export function talkFallbackText(name: string): string {
   return `${name} is napping right now. Try again later.`
 }
+
+export const itemViewText = {
+  notInItem: 'Open this view inside a Pokémon item',
+  level: 'Level', energy: 'Energy', gym: 'Gym', noGym: 'No gym',
+  hp: 'HP', attack: 'Attack', defense: 'Defense', speed: 'Speed',
+  talk: 'Talk', talking: 'Talking…',
+} as const
