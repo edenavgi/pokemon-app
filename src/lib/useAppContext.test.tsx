@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { ApiProvider } from '../api/ApiProvider'
 import { MockGameApi } from '../api/mock/MockGameApi'
 import { useAppContext } from './useAppContext'
@@ -24,5 +24,16 @@ describe('useAppContext', () => {
     unmount()
     act(() => api.setContext({ theme: 'light' }))
     expect(document.documentElement.classList.contains('dark')).toBe(true) // no longer listening
+  })
+
+  it('still returns the context when onContextChange is not implemented (throws)', async () => {
+    const api = new MockGameApi({ context: { itemId: 'p1' } })
+    api.onContextChange = () => { throw new Error('onContextChange: not implemented yet') }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const wrapper = ({ children }: { children: ReactNode }) => <ApiProvider api={api}>{children}</ApiProvider>
+    const { result } = renderHook(() => useAppContext(), { wrapper })
+    await waitFor(() => expect(result.current?.itemId).toBe('p1'))
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
   })
 })
