@@ -17,8 +17,9 @@ function NotFound() {
   return <p>Unknown screen</p>
 }
 
+// monday appends its own query after the hash route: "#/item-view?boardId=…&sessionToken=…"
 function parseHash(hash: string): string {
-  return hash.replace(/^#\/?/, '')
+  return hash.replace(/^#\/?/, '').split('?')[0]
 }
 
 function isRouteName(name: string): name is RouteName {

@@ -18,6 +18,12 @@ describe('Router', () => {
     expect(screen.getByTestId('route-' + name)).toBeInTheDocument()
   })
 
+  it('ignores the query monday appends after the hash route', () => {
+    location.hash = '#/item-view?boardId=1&itemId=2&sessionToken=abc&instanceId=3'
+    render(<Router routes={stubRoutes} />)
+    expect(screen.getByTestId('route-item-view')).toBeInTheDocument()
+  })
+
   it('renders NotFound for an unknown hash', () => {
     location.hash = '#/nope'
     render(<Router routes={stubRoutes} />)
