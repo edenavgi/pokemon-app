@@ -5,12 +5,25 @@ import { ApiProvider } from './api/ApiProvider.tsx'
 import type { GameApi } from './api/GameApi.ts'
 import { MockGameApi } from './api/mock/MockGameApi.ts'
 import { createMondayGameApi } from './api/monday/index.ts'
+import { RequireBoardConfig } from './features/setup/RequireBoardConfig.tsx'
 import { ROUTES, Router, type RouteName } from './router.tsx'
 
 // Placeholder screens; later tasks replace these with real ones.
-const routes = Object.fromEntries(
-  ROUTES.map((name) => [name, () => <div>{name}</div>]),
-) as unknown as Record<RouteName, ComponentType>
+function SetupScreen() {
+  return (
+    <RequireBoardConfig>
+      {(cfg) => <p>Boards configured: {cfg.gymsBoardId} / {cfg.pokemonBoardId}</p>}
+    </RequireBoardConfig>
+  )
+}
+
+const routes = {
+  ...(Object.fromEntries(ROUTES.map((name) => [name, () => <div>{name}</div>])) as unknown as Record<
+    RouteName,
+    ComponentType
+  >),
+  setup: SetupScreen,
+}
 
 // monday puts its query string after the hash, so check both places.
 function wantsMock(): boolean {
