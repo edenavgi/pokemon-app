@@ -12,7 +12,8 @@ export function useAsync<T>(fn: () => Promise<T>, deps: DependencyList): AsyncSt
   const run = useCallback(() => {
     const id = ++latest.current
     setState((s) => ({ ...s, loading: true, error: undefined }))
-    fnRef.current().then(
+    // new Promise(...) also catches a synchronous throw from fn (e.g. a "not implemented yet" stub)
+    new Promise<T>((resolve) => resolve(fnRef.current())).then(
       (data) => { if (id === latest.current) setState({ data, loading: false }) },
       (e: unknown) => {
         if (id === latest.current) setState({ error: e instanceof Error ? e : new Error(String(e)), loading: false })

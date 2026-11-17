@@ -3,6 +3,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { useAsync } from './useAsync'
 
 describe('useAsync', () => {
+  it('turns a synchronous throw into an error state (e.g. a "not implemented yet" stub)', async () => {
+    const fn = (): Promise<number> => { throw new Error('getPokemon: not implemented yet') }
+    const { result } = renderHook(() => useAsync(fn, []))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.error?.message).toBe('getPokemon: not implemented yet')
+  })
+
   it('goes loading -> data', async () => {
     const { result } = renderHook(() => useAsync(() => Promise.resolve(5), []))
     expect(result.current.loading).toBe(true)

@@ -18,6 +18,17 @@ beforeEach(() => { warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 afterEach(() => { warn.mockRestore() })
 
 describe('ItemView', () => {
+  it('shows a readable error (not a blank page) while MondayGameApi methods are stubs', async () => {
+    const api = new MockGameApi({ context: { itemId: '13567521117' } })
+    api.onContextChange = () => { throw new Error('onContextChange: not implemented yet') }
+    api.getPokemon = () => { throw new Error('getPokemon: not implemented yet') }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    render(<ApiProvider api={api}><ItemView /></ApiProvider>)
+    expect(await screen.findByText(/getPokemon: not implemented yet/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument()
+    warn.mockRestore()
+  })
+
   it('renders the profile for the context item', async () => {
     const api = setup()
     const p = await api.getPokemon('p1')

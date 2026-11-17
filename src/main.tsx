@@ -7,6 +7,7 @@ import { MockGameApi } from './api/mock/MockGameApi.ts'
 import { createMondayGameApi } from './api/monday/index.ts'
 import { ItemView } from './features/item-view/ItemView.tsx'
 import { RequireBoardConfig } from './features/setup/RequireBoardConfig.tsx'
+import { ErrorBoundary } from './components/ErrorBoundary.tsx'
 import { ROUTES, Router, type RouteName } from './router.tsx'
 
 // Placeholder screens; later tasks replace these with real ones.
@@ -63,7 +64,9 @@ try {
   root.render(
     <StrictMode>
       <ApiProvider api={api}>
-        <Router routes={routes} />
+        <ErrorBoundary>
+          <Router routes={routes} />
+        </ErrorBoundary>
       </ApiProvider>
     </StrictMode>,
   )
