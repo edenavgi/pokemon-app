@@ -2,9 +2,10 @@ import { StrictMode, type ComponentType } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import { ApiProvider } from './api/ApiProvider.tsx'
-import type { GameApi } from './api/GameApi.ts'
+import type { AppContext, GameApi } from './api/GameApi.ts'
 import { MockGameApi } from './api/mock/MockGameApi.ts'
 import { createMondayGameApi } from './api/monday/index.ts'
+import { ItemView } from './features/item-view/ItemView.tsx'
 import { RequireBoardConfig } from './features/setup/RequireBoardConfig.tsx'
 import { ROUTES, Router, type RouteName } from './router.tsx'
 
@@ -23,6 +24,7 @@ const routes = {
     ComponentType
   >),
   setup: SetupScreen,
+  'item-view': ItemView,
 }
 
 // monday puts its query string after the hash, so check both places.
@@ -35,9 +37,29 @@ function wantsMock(): boolean {
   )
 }
 
+// Dev convenience (mock mode only): ?itemId=p1&theme=dark&selectedItemIds=p1,p2 seeds the mock context.
+function mockContext(): Partial<AppContext> {
+  const hashQuery = location.hash.includes('?') ? location.hash.slice(location.hash.indexOf('?')) : ''
+  const params = [new URLSearchParams(location.search), new URLSearchParams(hashQuery)]
+  const get = (k: string) => params.map((p) => p.get(k)).find((v) => v)
+  const list = (k: string) => get(k)?.split(',').filter(Boolean)
+  const ctx: Partial<AppContext> = {}
+  const theme = get('theme')
+  if (theme === 'light' || theme === 'dark' || theme === 'black') ctx.theme = theme
+  for (const k of ['itemId', 'boardId', 'columnId'] as const) {
+    const v = get(k)
+    if (v) ctx[k] = v
+  }
+  const sel = list('selectedItemIds')
+  if (sel) ctx.selectedItemIds = sel
+  const wb = list('widgetBoardIds')
+  if (wb) ctx.widgetBoardIds = wb
+  return ctx
+}
+
 const root = createRoot(document.getElementById('root')!)
 try {
-  const api: GameApi = wantsMock() ? new MockGameApi() : createMondayGameApi()
+  const api: GameApi = wantsMock() ? new MockGameApi({ context: mockContext() }) : createMondayGameApi()
   root.render(
     <StrictMode>
       <ApiProvider api={api}>
