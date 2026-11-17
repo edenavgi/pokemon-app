@@ -1,4 +1,4 @@
-import type { Pokemon } from '../api/GameApi'
+import type { Gym, Pokemon } from '../api/GameApi'
 import { MAX_ENERGY, START_LEVEL } from './constants'
 
 export function makePokemon(overrides: Partial<Pokemon> = {}): Pokemon {
@@ -18,4 +18,8 @@ export function makePokemon(overrides: Partial<Pokemon> = {}): Pokemon {
     gym: { id: 'g1', name: 'Cinnabar Gym', type: 'Fire' },
     ...overrides,
   }
+}
+
+export function makeGym(overrides: Partial<Gym> = {}): Gym {
+  return { id: 'g1', name: 'Cinnabar Gym', type: 'Fire', roster: [], mirroredLevels: [], ...overrides }
 }
