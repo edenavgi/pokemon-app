@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ComponentType } from 'react'
 import { ROUTES, Router, type RouteName } from './router'
@@ -9,7 +9,6 @@ const stubRoutes = Object.fromEntries(
 
 describe('Router', () => {
   afterEach(() => {
-    cleanup()
     location.hash = ''
   })
 
