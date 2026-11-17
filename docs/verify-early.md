@@ -8,7 +8,22 @@ API version: `2026-10`. Source: query run in the API Playground on 2026-11-17 ag
 → The router reads only the part of the hash before `?` (fixed in `src/router.tsx`, test in `router.test.tsx`).
 → `boardId`/`itemId` are visible in the URL, but read them from `monday.get("context")` — the documented source, and it also updates via `listen`.
 
-_TODO (Task 4): open each of the 7 features once and record what `monday.get("context")` returns._
+**Item view context (`monday.get("context")`, seen 2026-11-17 on Charmander):**
+
+| Field | Example | Type |
+|---|---|---|
+| `boardId` | `18440319935` | **number** |
+| `itemId` | `13567521117` | **number** |
+| `boardIds` | `[18440319935]` | number[] |
+| `theme` | `"light"` | string |
+| `instanceType` | `"item_view"` | string |
+| `appFeature` | `{ type: 'AppFeatureItemView', name: 'Pokemon Profile - v1' }` | object |
+
+Not present in an item view: `columnId`, `selectedPulsesIds`.
+→ `getContext()` (`src/api/monday/index.ts`) converts every ID to a string (the contract's `Id = string`), maps `selectedPulsesIds` → `selectedItemIds` and `boardIds` → `widgetBoardIds`, and leaves fields that are absent as `undefined`.
+→ monday-sdk-js ships its types as `.ts` files that fail our strict tsconfig, so `tsconfig.app.json` maps the module to the local types in `src/types/monday-sdk-js.d.ts`.
+
+_TODO: record the context of the other features (board view, widget, Spar/Transfer, Status column, Gym HQ) as each one gets connected._
 
 ## 2. Column value shapes (GraphQL)
 
