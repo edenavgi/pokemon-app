@@ -5,3 +5,4 @@ export const EVOLVE_LEVEL = { 1: 3, 2: 6 } as const
 export const LUCK_MIN = 0.8
 export const LUCK_MAX = 1.2
 export const START_LEVEL = 1
+export const GEN1_MAX_DEX = 151
