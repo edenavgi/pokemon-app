@@ -21,6 +21,17 @@ describe('messages', () => {
     expect(joinErrorText('ROSTER_FULL')).toMatch(/full/i)
   })
 
+  it('agrees verbs with one or several names', () => {
+    expect(joinErrorText('TYPE_MISMATCH', ['A'])).toBe("A doesn't match this gym's type.")
+    expect(joinErrorText('TYPE_MISMATCH', ['A', 'B'])).toBe("A and B don't match this gym's type.")
+    expect(joinErrorText('DUPLICATE', ['A', 'B'])).toBe('A and B are already in that gym.')
+    expect(sparErrorText('NO_GYM', ['A'])).toBe('A needs a gym before sparring.')
+    expect(sparErrorText('NO_GYM', ['A', 'B'])).toBe('A and B need a gym before sparring.')
+    expect(sparErrorText('NO_ENERGY', ['A', 'B'])).toBe('A and B have no energy left — let them rest first.')
+    expect(sparErrorText('RESTING', ['A', 'B'])).toBe('A and B are resting right now.')
+    expect(sparErrorText('RESTING', ['A'])).toBe('A is resting right now.')
+  })
+
   it('evoBlockText covers every code', () => {
     const codes: EvoBlock[] = ['MAX_STAGE', 'NO_LEVEL_EVOLUTION', 'BRANCHING', 'OUTSIDE_GEN1', 'LEVEL_TOO_LOW']
     for (const c of codes) expect(evoBlockText(c, 3).length).toBeGreaterThan(5)

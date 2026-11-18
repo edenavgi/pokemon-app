@@ -10,23 +10,25 @@ function list(names?: string[], fallback = 'A Pokémon'): string {
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }
 
+const plural = (names?: string[]) => (names?.length ?? 0) > 1
+
 export function sparErrorText(e: SparError, names?: string[]): string {
   switch (e) {
     case 'NEED_TWO': return 'Pick two Pokémon to spar.'
     case 'DUPLICATE': return 'Pick two different Pokémon.'
-    case 'NO_GYM': return `${list(names)} needs a gym before sparring.`
+    case 'NO_GYM': return `${list(names)} ${plural(names) ? 'need' : 'needs'} a gym before sparring.`
     case 'DIFFERENT_GYMS': return 'Sparring partners must be in the same gym.'
-    case 'NO_ENERGY': return `${list(names)} has no energy left — let it rest first.`
-    case 'RESTING': return `${list(names)} is resting right now.`
+    case 'NO_ENERGY': return `${list(names)} ${plural(names) ? 'have no energy left — let them' : 'has no energy left — let it'} rest first.`
+    case 'RESTING': return `${list(names)} ${plural(names) ? 'are' : 'is'} resting right now.`
   }
 }
 
 export function joinErrorText(e: JoinError | 'DUPLICATE', names?: string[]): string {
   switch (e) {
-    case 'TYPE_MISMATCH': return `${list(names)} doesn't match this gym's type.`
+    case 'TYPE_MISMATCH': return `${list(names)} ${plural(names) ? "don't" : "doesn't"} match this gym's type.`
     case 'ROSTER_FULL': return 'That gym roster is full.'
     case 'GYM_HAS_NO_TYPE': return 'That gym has no type yet — give it one first.'
-    case 'DUPLICATE': return `${list(names)} is already in that gym.`
+    case 'DUPLICATE': return `${list(names)} ${plural(names) ? 'are' : 'is'} already in that gym.`
   }
 }
 
@@ -71,4 +73,25 @@ export const itemViewText = {
   level: 'Level', energy: 'Energy', gym: 'Gym', noGym: 'No gym',
   hp: 'HP', attack: 'Attack', defense: 'Defense', speed: 'Speed',
   talk: 'Talk', talking: 'Talking…',
+} as const
+
+export const selectionText = {
+  notLoaded: 'Some selected items could not be loaded. Refresh the board and try again.',
+  wrongBoard: 'Open this action on the Pokémon board.',
+} as const
+
+export const sparText = {
+  title: 'Spar',
+  level: 'Level', energy: 'Energy', status: 'Status',
+  confirm: 'Confirm', saving: 'Saving…',
+  success: (a: string, b: string) => `${a} and ${b} sparred: +1 level, -1 energy each.`,
+} as const
+
+export const transferText = {
+  title: 'Transfer to gym',
+  noSelection: 'Select Pokémon on the board first',
+  noGyms: 'No gyms to transfer to',
+  nothingToMove: 'Nothing to move',
+  gymMeta: (type: string | null, count: number) => `${type ?? 'No type'} · ${count} Pokémon`,
+  success: (names: string[], gym: string) => `Moved ${list(names)} to ${gym}.`,
 } as const

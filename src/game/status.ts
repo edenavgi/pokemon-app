@@ -13,7 +13,7 @@ export function validateSpar(ps: Pokemon[]): SparValidation {
   if (ps.length !== 2) return { ok: false, error: 'NEED_TWO' }
   const [a, b] = ps
   if (a.id === b.id) return { ok: false, error: 'DUPLICATE' }
-  if (!a.gym || !b.gym) return { ok: false, error: 'NO_GYM' }
+  if (!a.gym || !b.gym) return { ok: false, error: 'NO_GYM', names: ps.filter((p) => !p.gym).map((p) => p.name) }
   if (a.gym.id !== b.gym.id) return { ok: false, error: 'DIFFERENT_GYMS' }
   const resting = ps.filter((p) => p.status === 'Resting')
   if (resting.length > 0) return { ok: false, error: 'RESTING', names: resting.map((p) => p.name) }
