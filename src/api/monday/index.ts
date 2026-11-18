@@ -1,24 +1,40 @@
 import mondaySdk from "monday-sdk-js";
-import type { AppContext, GameApi, Gym, PokeType, Pokemon, SpeciesDetail, Status, ThemeName } from "../GameApi";
+import type { AppContext, BoardConfig, GameApi, Gym, PokeType, Pokemon, SpeciesDetail, Status, ThemeName } from "../GameApi";
 import { SeamlessApiClient } from "@mondaydotcomorg/api";
 
 const monday = mondaySdk();
 
 const client = new SeamlessApiClient("2026-10");
 
+// The fields of one Pokémon item, shared by every query that reads Pokémon (→ toPokemon)
+const POKEMON_FIELDS = `
+  id
+  name
+  column_values {
+    text
+    value
+    column { title }
+    ... on DropdownValue { values { label } }
+    ... on StatusValue { label }
+    ... on BoardRelationValue { linked_item_ids display_value }
+    ... on MirrorValue { display_value }
+  }
+`;
+
+// Pokémon by item IDs (profile, rosters)
 const POKEMON_QUERY = `
-    query ($itemIds: [ID!]) {
-    items(ids: $itemIds, limit: 100) {
-      id
-      name
-      column_values {
-        text
-        value
-        column { title }
-        ... on DropdownValue { values { label } }
-        ... on StatusValue { label }
-        ... on BoardRelationValue { linked_item_ids display_value }
-        ... on MirrorValue { display_value }
+  query ($itemIds: [ID!]) {
+    items(ids: $itemIds, limit: 100) { ${POKEMON_FIELDS} }
+  }
+`;
+
+// Every Pokémon on the given boards (widget)
+const POKEMON_BOARD_QUERY = `
+  query ($boardIds: [ID!]) {
+    boards(ids: $boardIds) {
+      items_page(limit: 500) {
+        cursor
+        items { ${POKEMON_FIELDS} }
       }
     }
   }
@@ -53,6 +69,20 @@ const GYMS_QUERY = `
     }
   }
 `;
+
+// The boards the user can pick in BoardSetup: most recently used first, real boards only
+const BOARDS_QUERY = `
+  query {
+    boards(limit: 100, order_by: used_at) {
+      id
+      name
+      type
+    }
+  }
+`;
+
+// Global SDK storage key (shared by every widget/view of the app in this account)
+const BOARD_CONFIG_KEY = "boardConfig";
 
 // The shape of one column value, as we saw it in the console
 interface ColumnValue {
@@ -119,6 +149,16 @@ async function fetchPokemon(itemIds: string[]): Promise<Pokemon[]> {
     { itemIds },
   );
   return res.data.data.items.map(toPokemon);
+}
+
+// All items of the given boards from a boards → items_page query (one page of up to 500 per board)
+async function fetchBoardItems<T>(query: string, boardIds: string[] | undefined, label: string): Promise<T[]> {
+  const res = await client.request<{
+    data: { data: { boards: { items_page: { cursor: string | null; items: T[] } }[] } };
+  }>(query, { boardIds });
+  const pages = res.data.data.boards.map((b) => b.items_page);
+  if (pages.some((p) => p.cursor)) console.warn(`[${label}] a board has more than 500 items; only the first 500 are used`);
+  return pages.flatMap((p) => p.items);
 }
 
 interface GymItem {
@@ -232,24 +272,46 @@ export function createMondayGameApi(): GameApi {
         const { itemIds } = res.data as { itemIds?: number[] };
         if (itemIds?.map(String).includes(itemId)) cb();
       }),
-    listBoards: () => notYet("listBoards"),
-    getBoardConfig: () => notYet("getBoardConfig"),
-    setBoardConfig: () => notYet("setBoardConfig"),
+    listBoards: async () => {
+      const res = await client.request<{
+        data: { data: { boards: { id: string; name: string; type: string }[] } };
+      }>(BOARDS_QUERY);
+      const boards = res.data.data.boards;
+      if (boards.length === 100) console.warn("[listBoards] showing only the 100 most recently used boards");
+      // skip docs, subitem boards and custom objects
+      return boards.filter((b) => b.type === "board").map(({ id, name }) => ({ id, name }));
+    },
+    getBoardConfig: async () => {
+      const res = await monday.storage.getItem(BOARD_CONFIG_KEY);
+      const raw = res.data?.value;
+      if (!raw) return null; // never saved
+      try {
+        return JSON.parse(raw) as BoardConfig;
+      } catch {
+        return null; // corrupt value → ask the user again
+      }
+    },
+    setBoardConfig: async (cfg) => {
+      const res = await monday.storage.setItem(BOARD_CONFIG_KEY, JSON.stringify(cfg));
+      if ((res.data as { success?: boolean } | undefined)?.success === false) {
+        throw new Error("Could not save the board settings");
+      }
+    },
     getPokemon: async (itemId) => {
       const [pokemon] = await fetchPokemon([itemId]);
       if (!pokemon) throw new Error(`Pokémon item ${itemId} not found`);
       return pokemon;
     },
     getPokemonMany: (itemIds) => fetchPokemon(itemIds),
-    listPokemon: () => notYet("listPokemon"),
+    listPokemon: async (opts) => {
+      const items = await fetchBoardItems<PokemonItem>(POKEMON_BOARD_QUERY, opts?.boardIds, "listPokemon");
+      // gymId/status are filtered here (client side); no screen passes them yet
+      return items
+        .map(toPokemon)
+        .filter((p) => (!opts?.gymId || p.gym?.id === opts.gymId) && (!opts?.status || p.status === opts.status));
+    },
     listGyms: async (opts) => {
-      const res = await client.request<{
-        data: { data: { boards: { items_page: { cursor: string | null; items: GymItem[] } }[] } };
-      }>(GYMS_QUERY, { boardIds: opts?.boardIds });
-
-      const pages = res.data.data.boards.map((b) => b.items_page);
-      if (pages.some((p) => p.cursor)) console.warn("[listGyms] a board has more than 500 gyms; only the first 500 are shown");
-      const gymItems = pages.flatMap((p) => p.items);
+      const gymItems = await fetchBoardItems<GymItem>(GYMS_QUERY, opts?.boardIds, "listGyms");
 
       // ONE query for every Pokémon of every gym
       const allIds = [...new Set(gymItems.flatMap(rosterIds))];

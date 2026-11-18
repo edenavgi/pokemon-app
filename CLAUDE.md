@@ -4,9 +4,8 @@
 - **Plan:** `docs/superpowers/plans/2026-11-17-pokemon-gym-manager.md`
   - Executed with superpowers:subagent-driven-development.
   - The ledger lives in `.superpowers/sdd/` (untracked).
-- **Split:** Claude builds the React screens and the pure game rules (`src/game/`). Eden builds everything that talks to monday, in `src/api/monday/`.
-  - Never write SDK, GraphQL or PokéAPI fetch code.
-  - Never edit `src/api/monday/`.
+- **Split:** Claude builds the React screens and the pure game rules (`src/game/`). The monday connection (`src/api/monday/`) is Eden's learning track.
+  - Since Task 16 (Eden's decision, 2026-11-18): Claude writes the `src/api/monday/` code directly instead of having Eden copy-paste it, but still guides step by step. Look at the real data first (docs, console) and explain each piece so Eden understands what and why before moving on.
 - **Git:** follow `docs/GIT_WORKFLOW.md` strictly.
   - No commits to `main`.
   - One branch per topic.
