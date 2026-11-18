@@ -31,3 +31,19 @@ For each feature: which monday concept it uses and why. Details of the real data
 - **Why:** clicking a cell opens the app inside monday for that one item. The dialog offers only the moves the game rules allow and writes the new status back with `change_multiple_column_values`. Evolve writes the new form's name, sprite, stats and types in the same mutation, leaving level, gym and status alone, and then posts "X evolved into Y" as an update on the item. That history lives in monday, not in the app.
 - **Evolution chain:** PokéAPI returns a tree (`evolves_to`). The app finds the path from the root to the Pokémon. The stage is the number of Gen-1 forms on that path, and the next forms are the children of the last node. A form evolves "by level" only if PokéAPI gives a `min_level`. Chains are cached per chain, because Charmander, Charmeleon and Charizard share one.
 - **In development:** the feature is attached through the Column Center (Development Apps), which adds its own "Status & Evolve" column. That column is only the entry point; the dialog still writes the original Status column.
+
+## 6.6 Custom object: Gym HQ (not built)
+- **Status:** not started. Plan Tasks 21 (screen) and 22 (connection) are open.
+- **Concepts it would use:** custom object feature (a standalone page in the left menu), `create_item` with a Connect boards value (recruit), `create_update` on both gyms (battle log), and PokéAPI type damage relations (`getTypeChart`). The pure rules are already written and tested in `src/game/` (`battle`, `canJoinGym`, `validateTransfer`).
+
+## Summary: which monday concept each feature uses
+
+| Feature | monday feature type | Main API / SDK concepts | Status in monday |
+|---|---|---|---|
+| 6.1 Pokémon profile | Item view | `get("context")`, `listen("events")`, `items(ids)` | ✅ works |
+| 6.7 Talk | (inside 6.1) | `run_prompt` mutation (2026-10+) | ✅ works |
+| 6.2 Gym roster | Board view | `boards → items_page`, Connect + Mirror, one `items(ids)` for all rosters | ✅ works |
+| 6.3 Stats widget | Dashboard widget | widget context `boardIds`, SDK global storage, `boards` list | ✅ works (1 and 2 boards) |
+| 6.4 Spar / Transfer | Board multi-item menu | `selectedPulsesIds`, `change_multiple_column_values` with aliases, `execute("notice")`, `closeAppFeatureModal` | ✅ works |
+| 6.5 Status & Evolve | Status column (on-click dialog) | column context, writes incl. item `name`, `create_update`, PokéAPI evolution chains | ✅ works |
+| 6.6 Gym HQ | Custom object | `create_item`, Connect write, updates, type chart | ❌ not built |
