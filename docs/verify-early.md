@@ -33,6 +33,11 @@ Not present in an item view: `columnId`, `selectedPulsesIds`.
 - The event fires for **every** change on the board (Squirtle too), so `onItemChanged` filters by item ID before calling back.
 - The listener lives only while the feature's iframe is open: a change made while the item card is closed is never heard.
 
+**Status column dialog context (`monday.get("context")`, seen 2026-11-18, clicking Charmander's cell):**
+`{ boardId: 18440319935, itemId: 13567521117, columnId: "color_mm97h66p", appFeature: { type: "AppFeatureDialog", name: "Dialog feature - v1" } }`. IDs are numbers, as in the item view. Other keys: `columnType`, `event`, `placement`, `hover`, `click`, `selectedItemIds`, `permissions`, `appFeatureId`. There is no `instanceType`.
+- **Logging the context:** `console.log(res.data)` shows "No properties" when expanded, because the object arrives through postMessage. Log `JSON.stringify(...)` instead.
+- **Attaching it (development):** the Status-column feature does **not** appear under the column's ⋯ → *Column extensions* (installed apps only). It does appear under **Add column (+) → More columns → Column Center → Development Apps → "Status & Evolve" → Add to board**. That adds a **new** status column ("Status & Evolve") with the extension. Clicking its cell opens the dialog, and `columnId` is that new column. The dialog reads and writes the original `Status` column by title, so the new column is only the entry point.
+
 _TODO: record the context of the other features (board view, widget, Spar/Transfer, Status column, Gym HQ) as each one gets connected._
 
 ## 2. Column value shapes (GraphQL)
@@ -99,4 +104,14 @@ mutation ($prompt: String!, $config: RunPromptConfigInput) {
 - **Connect boards write replaces** the links rather than appending (the docs don't say). Seen: Transfer moved Charmander from Cinnabar to Cerulean, and the Gym cell then showed only Cerulean. The two-way link updated the Gyms board by itself.
 - Board **multi-item menu** features of an uninstalled (development) app do **not** appear in the Apps list of the selection bar, but they **do** appear when you search for the feature's name ("Transfer to gym", "Spar selected").
 - `monday.execute("notice", { message, type, timeout })` shows the toast. `closeAppFeatureModal` closes the multi-item menu window.
-- Not yet verified: whether `"name"` in `column_values` renames the item (needed for evolution, Task 20).
+- **`"name"` in `column_values` renames the item.** Seen in Task 20: Evolve renamed Charmander → Charmeleon → Charizard on the board, and changed sprite, stats and types in the same `change_multiple_column_values` call.
+- `closeAppFeatureModal` also closes the Status-column **dialog**. The SDK docs pair `closeDialog` with the AI assistant, but it isn't needed here.
+
+## 9. Evolution chains and updates (Task 20, 2026-11-18)
+- `pokemon-species/{n}.evolution_chain.url` → `evolution-chain/{id}`, a **tree**: `chain { species{name,url}, evolution_details[], evolves_to[] }`. The dex number is the last path segment of `species.url`.
+- **Baby forms outside Gen 1** sit at the root (Pichu #172 → Pikachu). Count the stage over Gen-1 nodes only, or Pikachu would be stage 2.
+- `evolution_details` is an **array**, with one entry per game version (Leafeon has 8). A form counts as `level-up` only when some entry has `trigger.name === "level-up"` **and** a `min_level`. A level-up without a level (friendship: Crobat, Espeon) or `use-item` counts as `other`.
+- `next` is not filtered to Gen 1, so `evolutionCheck` can say "outside Generation 1" (Golbat → Crobat #169). Eevee has 8 branches, which gives `BRANCHING`.
+- Checked live against PokéAPI: 4 → stage 1, next Charmeleon (level-up@16); 5 → stage 2; 6 → stage 3, none; 25 → stage 1, Raichu other; 133 → stage 1, 8 options; 42 → stage 2, Crobat other; 1 → stage 1, Ivysaur.
+- The game's thresholds come from the spec (stage 1→2 at level 3, 2→3 at level 6). PokéAPI's `min_level` only tells whether a form evolves by level.
+- `create_update(item_id: ID, body: String!) { id }` posts in the item's Updates tab. Seen: "Charmander evolved into Charmeleon".
