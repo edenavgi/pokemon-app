@@ -7,6 +7,7 @@ import { MockGameApi } from './api/mock/MockGameApi.ts'
 import { createMondayGameApi } from './api/monday/index.ts'
 import { BoardView } from './features/board-view/BoardView.tsx'
 import { ItemView } from './features/item-view/ItemView.tsx'
+import { Widget } from './features/widget/Widget.tsx'
 import { RequireBoardConfig } from './features/setup/RequireBoardConfig.tsx'
 import { ErrorBoundary } from './components/ErrorBoundary.tsx'
 import { ROUTES, Router, type RouteName } from './router.tsx'
@@ -28,6 +29,7 @@ const routes = {
   setup: SetupScreen,
   'board-view': BoardView,
   'item-view': ItemView,
+  widget: Widget,
 }
 
 // monday puts its query string after the hash, so check both places.

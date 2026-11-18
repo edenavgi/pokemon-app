@@ -59,6 +59,13 @@ export const boardViewText = {
   emptyFilter: 'No Pokémon with this status',
 } as const
 
+export const widgetText = {
+  noBoards: 'Connect the Gyms and/or Pokémon board in widget settings',
+  connectPokemon: 'Connect the Pokémon board to see status',
+  gym: 'Gym', pokemon: 'Pokémon', avgLevel: 'Avg level', byStatus: 'By status',
+  noAvg: '—',
+} as const
+
 export const itemViewText = {
   notInItem: 'Open this view inside a Pokémon item',
   level: 'Level', energy: 'Energy', gym: 'Gym', noGym: 'No gym',
