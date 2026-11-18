@@ -38,7 +38,15 @@ Not present in an item view: `columnId`, `selectedPulsesIds`.
 - **Logging the context:** `console.log(res.data)` shows "No properties" when expanded, because the object arrives through postMessage. Log `JSON.stringify(...)` instead.
 - **Attaching it (development):** the Status-column feature does **not** appear under the column's ⋯ → *Column extensions* (installed apps only). It does appear under **Add column (+) → More columns → Column Center → Development Apps → "Status & Evolve" → Add to board**. That adds a **new** status column ("Status & Evolve") with the extension. Clicking its cell opens the dialog, and `columnId` is that new column. The dialog reads and writes the original `Status` column by title, so the new column is only the entry point.
 
-_TODO: record the context of the other features (board view, widget, Spar/Transfer, Status column, Gym HQ) as each one gets connected._
+**Other features (what the code relies on, seen working 2026-11-18):**
+
+| Feature | Context fields used | Notes |
+|---|---|---|
+| Board view (Gym Roster) | `boardId` | → `listGyms({ boardIds: [boardId] })`. Opened from Views Center → Development Apps → Open in board. |
+| Dashboard widget (Gym Stats) | `boardIds` → `widgetBoardIds` | Changes live when the dashboard's connected boards change (§7). Added via Add widget → Development Apps. |
+| Board multi-item menu (Spar selected / Transfer to gym) | `selectedPulsesIds` → `selectedItemIds`, `boardId` | Found by **searching the feature name** in the selection bar's Apps menu (§8). |
+| Status column dialog | `itemId`, `columnId`, `boardId` | See above. |
+| Custom object (Gym HQ) | — | Not built (Tasks 21–22 not done). |
 
 ## 2. Column value shapes (GraphQL)
 
@@ -64,12 +72,15 @@ Experiment: linked Squirtle (Level 7) to Cinnabar next to Charmander (Level 5), 
 - The screen shows only `Graphql validation errors`; the real reason is in the thrown error's `response.errors[0].message`. Log it when a query fails.
 - Without the app's OAuth scopes every query fails with `Unauthorized to load field 'Query.items', Reason: missing required scopes.` → set the scopes in the Developer Center (**OAuth & Permissions**): `boards:read`, `boards:write`, `updates:write`, `me:read`, `workspaces:read`, `AI:Consume`.
 - The scope list in **Build → OAuth & permissions** is now granular (`account:read`, `apps:read`, `assets:read`, `boards:create`…), not just the six names above. With only some scopes checked, `Query.items` still failed; **checking all scopes fixed it, with no install** (the app is still "not installed"; only account admins can install in our Enterprise account). So the developer's own preview gets the draft version's scopes without an install.
-- _TODO: find the minimal set of scopes (least privilege) before anyone else installs the app — every checked scope is shown to the installing admin._
+- **Open item:** all scopes are still checked (development). Before anyone installs the app, trim them to the minimum (least privilege). Every checked scope is shown to the installing admin.
 
 ## 4. Resolving column IDs without hardcoding
 Column IDs are account-specific and random (`numeric_mm96ne2j`, `lookup_mm96y2hj`…). They also change if a column is deleted and recreated (seen with the Gyms mirror: `lookup_mm962j39` → `lookup_mm96y2hj`).
 → Resolve once per board with `boards(ids:[…]) { columns { id title type } }` and match by **title + type**. Titles must therefore be unique per board (we deleted a duplicate `Status` for this reason).
-_TODO (Task 4): implement and record the approach._
+**How the code does it:**
+- **Reads:** every query asks for `column_values { column { title } … }`, and `columnReader(columnValues, board)` maps the values by **title**, throwing `<board> board: missing column "<title>"` if one is missing. No column IDs are needed for reading.
+- **Writes:** `writeItems()` first queries `items(ids) { board { id columns { id title } } }`, then translates titles → IDs for `change_multiple_column_values` (§8). One read and one write request per action; nothing is hardcoded.
+- Titles the code expects: Pokémon board — `Pokédex number`, `Types`, `Sprite`, `HP`, `Attack`, `Defense`, `Speed`, `Level`, `Energy`, `Status`, `Gym`, `Gym type (mirror)`; Gyms board — `Type`, `Pokemon`, `Level (mirror)`.
 
 ## 5. `run_prompt` from the browser
 **Works** from the item view iframe through `SeamlessApiClient("2026-10")` (seen 2026-11-18: Charmander replied). Docs: https://developer.monday.com/api-reference/reference/ai
