@@ -46,9 +46,11 @@ _TODO: record the context of the other features (board view, widget, Spar/Transf
 | **board_relation** (`Gym`, `Pokemon`) | **`null`** | **`null`** | `... on BoardRelationValue { linked_item_ids display_value }` | `cv.linked_item_ids` (array of string IDs). ⚠️ `text`/`value` are always null → without the fragment the link is invisible |
 | **mirror** (`Level (mirror)`, `Gym type (mirror)`) | **`null`** | **`null`** | `... on MirrorValue { display_value }` | only `display_value` carries data, as **one string** (`"1"`, `"Fire"`) |
 
-### Open question (needed for the widget's average level)
-With **several** linked Pokémon, what does `Level (mirror).display_value` look like (separator? order? empty values?), and is parsing it reliable — or should the average come from the linked items' own `Level` instead?
-_Experiment: link Squirtle to Cinnabar too, set its Level to 4, rerun the query, record the result here, then revert._
+### Mirror with several linked items (answered 2026-11-18)
+Experiment: linked Squirtle (Level 7) to Cinnabar next to Charmander (Level 5), ran the Gyms query, then reverted.
+- `Pokemon.linked_item_ids` → two IDs; `Level (mirror).display_value` → **`"5, 7"`**: one string, values joined by **comma + space**, in the same order as the links.
+- → parse with `split(",")`, `trim()`, drop empty parts, `Number()`; an unlinked gym gives `""` → `[]`. Use the mirrored numbers only for aggregates (count, average), never to pair a level with a Pokémon — the cards need the linked items themselves (one `items(ids:[…])` query).
+- Gyms query: `boards(ids:$boardIds) { items_page(limit: 500) { cursor items {…} } }` — default limit 25, max 500; `cursor: null` means no further page.
 
 ## 3. SeamlessApiClient from the iframe
 `new SeamlessApiClient("2026-10")` works from the item view iframe with no token: monday runs the request as the signed-in user (seen 2026-11-18).
