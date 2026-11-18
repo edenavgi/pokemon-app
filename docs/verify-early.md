@@ -86,3 +86,9 @@ mutation ($prompt: String!, $config: RunPromptConfigInput) {
 - Types are lowercase (`fire`) → capitalised to match `PokeType`. Stats are an array searched by `stat.name`.
 - English flavor text contains `\n` and `\f` → collapsed with `.replace(/\s+/g, " ")`.
 - Cached in memory per page load as a `Promise` per dex number (concurrent calls share one request; failures are not cached).
+
+## 7. SDK storage and the widget context (Task 16, 2026-11-18)
+- `monday.storage.getItem(key)` → the value is at `res.data.value` (a string). The docs don't say what an unsaved key returns, so treat any falsy value as "not saved". `setItem(key, value)` reports `res.data.success`. Values are strings (6MB per key): store `JSON.stringify(cfg)`.
+- **Global** storage (`monday.storage.*`) is scoped to account + app and shared by every feature instance. `monday.storage.instance.*` is per instance and resets on a new major version.
+- The widget's connected boards (dashboard "connected boards") arrive in the context as `boardIds` and change live when boards are added or removed. Checked with one board (Gyms only → hint) and with two.
+- A feature's **Custom URL** in Developer Center → View Setup is only kept once it is saved for the feature. An empty field on reload means the URL was never stored, and the widget renders blank.
