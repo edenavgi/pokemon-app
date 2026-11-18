@@ -52,6 +52,13 @@ export function talkFallbackText(name: string): string {
   return `${name} is napping right now. Try again later.`
 }
 
+export const boardViewText = {
+  gym: 'Gym', filterByStatus: 'Filter by status', all: 'All',
+  noGyms: 'No gyms on this board yet',
+  emptyGym: 'No Pokémon in this gym yet',
+  emptyFilter: 'No Pokémon with this status',
+} as const
+
 export const itemViewText = {
   notInItem: 'Open this view inside a Pokémon item',
   level: 'Level', energy: 'Energy', gym: 'Gym', noGym: 'No gym',

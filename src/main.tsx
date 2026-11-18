@@ -5,6 +5,7 @@ import { ApiProvider } from './api/ApiProvider.tsx'
 import type { AppContext, GameApi } from './api/GameApi.ts'
 import { MockGameApi } from './api/mock/MockGameApi.ts'
 import { createMondayGameApi } from './api/monday/index.ts'
+import { BoardView } from './features/board-view/BoardView.tsx'
 import { ItemView } from './features/item-view/ItemView.tsx'
 import { RequireBoardConfig } from './features/setup/RequireBoardConfig.tsx'
 import { ErrorBoundary } from './components/ErrorBoundary.tsx'
@@ -25,6 +26,7 @@ const routes = {
     ComponentType
   >),
   setup: SetupScreen,
+  'board-view': BoardView,
   'item-view': ItemView,
 }
 
