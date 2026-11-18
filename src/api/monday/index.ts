@@ -1,5 +1,7 @@
 import mondaySdk from "monday-sdk-js";
-import type { AppContext, BoardConfig, GameApi, Gym, PokeType, Pokemon, SpeciesDetail, Status, ThemeName } from "../GameApi";
+import type {
+  AppContext, BoardConfig, GameApi, Gym, PokeType, Pokemon, PokemonPatch, SpeciesDetail, Status, ThemeName,
+} from "../GameApi";
 import { SeamlessApiClient } from "@mondaydotcomorg/api";
 
 const monday = mondaySdk();
@@ -194,6 +196,85 @@ function toGym(item: GymItem, pokemonById: Map<string, Pokemon>): Gym {
   };
 }
 
+// ---------- Writing to the board ----------
+
+// Writes need column IDs, not titles: read each item's board and its columns first
+const ITEM_BOARDS_QUERY = `
+  query ($itemIds: [ID!]) {
+    items(ids: $itemIds, limit: 100) {
+      id
+      board { id columns { id title } }
+    }
+  }
+`;
+
+interface ItemBoard {
+  id: string;
+  board: { id: string; columns: { id: string; title: string }[] };
+}
+
+type ColumnIdOf = (title: string) => string;
+
+// Writes column values to many items in ONE request: one aliased change_multiple_column_values per item.
+// `build(itemId, col)` returns { columnId: value } for that item; col("Level") gives the column's ID.
+async function writeItems(
+  itemIds: string[],
+  build: (itemId: string, col: ColumnIdOf) => Record<string, unknown>,
+): Promise<void> {
+  if (itemIds.length === 0) return;
+  if (itemIds.length > 100) throw new Error("Cannot update more than 100 items at once");
+
+  const res = await client.request<{ data: { data: { items: ItemBoard[] } } }>(ITEM_BOARDS_QUERY, { itemIds });
+  const itemById = new Map(res.data.data.items.map((i) => [i.id, i]));
+
+  // Validate everything (items exist, columns exist) BEFORE the first write
+  const writes = itemIds.map((itemId) => {
+    const item = itemById.get(itemId);
+    if (!item) throw new Error(`Item ${itemId} not found`);
+    const idByTitle = new Map(item.board.columns.map((c) => [c.title, c.id]));
+    const col: ColumnIdOf = (title) => {
+      const id = idByTitle.get(title);
+      if (!id) throw new Error(`Pokemon board: missing column "${title}"`);
+      return id;
+    };
+    return { boardId: item.board.id, itemId, values: build(itemId, col) };
+  });
+
+  // mutation ($board0: ID!, $item0: ID!, $values0: JSON!, $board1: …) { w0: change_…(…) { id } w1: … }
+  const declarations = writes.map((_, i) => `$board${i}: ID!, $item${i}: ID!, $values${i}: JSON!`).join(", ");
+  const fields = writes
+    .map((_, i) => `w${i}: change_multiple_column_values(board_id: $board${i}, item_id: $item${i}, column_values: $values${i}) { id }`)
+    .join("\n    ");
+  const variables = Object.fromEntries(
+    writes.flatMap((w, i) => [
+      [`board${i}`, w.boardId],
+      [`item${i}`, w.itemId],
+      [`values${i}`, JSON.stringify(w.values)], // column_values is a JSON *string*
+    ]),
+  );
+  await client.request(`mutation (${declarations}) {\n    ${fields}\n  }`, variables);
+}
+
+// Number columns: patch field → column title
+const NUMBER_COLUMNS = {
+  dexNumber: "Pokédex number", hp: "HP", attack: "Attack", defense: "Defense",
+  speed: "Speed", level: "Level", energy: "Energy",
+} as const;
+
+// A PokemonPatch → { columnId: value } in the format each column type expects when WRITING
+function patchToColumnValues(patch: PokemonPatch, col: ColumnIdOf): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+  for (const [field, title] of Object.entries(NUMBER_COLUMNS) as [keyof typeof NUMBER_COLUMNS, string][]) {
+    const n = patch[field];
+    if (n !== undefined) values[col(title)] = String(n); // numbers: "5"
+  }
+  if (patch.status !== undefined) values[col("Status")] = { label: patch.status }; // status: by label, never index
+  if (patch.types !== undefined) values[col("Types")] = { labels: patch.types }; // dropdown: by labels
+  if (patch.spriteUrl !== undefined) values[col("Sprite")] = { url: patch.spriteUrl, text: patch.name ?? "sprite" }; // link
+  if (patch.name !== undefined) values.name = patch.name; // the item name (used by evolution, Task 20)
+  return values;
+}
+
 // ---------- PokéAPI ----------
 const POKEAPI = "https://pokeapi.co/api/v2";
 
@@ -322,11 +403,26 @@ export function createMondayGameApi(): GameApi {
     getGym: () => notYet("getGym"),
     createGym: () => notYet("createGym"),
     recruit: () => notYet("recruit"),
-    updatePokemon: () => notYet("updatePokemon"),
-    setGym: () => notYet("setGym"),
+    updatePokemon: async (patches) => {
+      const patchById = new Map(patches.map((p) => [p.id, p.patch]));
+      await writeItems([...patchById.keys()], (itemId, col) => patchToColumnValues(patchById.get(itemId)!, col));
+    },
+    // The Gym connect column: { item_ids: [gymId] }. Two-way connect updates the Gyms board by itself.
+    setGym: (pokemonIds, gymId) =>
+      writeItems([...new Set(pokemonIds)], (_, col) => ({ [col("Gym")]: { item_ids: [Number(gymId)] } })),
     postUpdate: () => notYet("postUpdate"),
-    notify: () => notYet("notify"),
-    closeFeature: () => notYet("closeFeature"),
+    // A toast inside monday (green / red / blue). Fire-and-forget: the contract returns void.
+    notify: (message, type) => {
+      monday
+        .execute("notice", { message, type, timeout: 5000 })
+        .catch((e: unknown) => console.warn("[notify] monday notice failed", e));
+    },
+    // Closes the window monday opened for this feature (e.g. "Transfer to gym").
+    closeFeature: () => {
+      monday
+        .execute("closeAppFeatureModal")
+        .catch((e: unknown) => console.warn("[closeFeature] could not close the feature window", e));
+    },
     listGen1: () => notYet("listGen1"),
     getSpecies: (dexNumber) => {
       let cached = speciesCache.get(dexNumber);
