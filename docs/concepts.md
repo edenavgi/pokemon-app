@@ -25,3 +25,9 @@ For each feature: which monday concept it uses and why. Details of the real data
 - **Write formats** are the reverse of the read shapes: numbers as `"6"`, status as `{ label }`, dropdown as `{ labels: [...] }`, link as `{ url, text }`, Connect boards as `{ item_ids: [...] }`.
 - **Notices and closing:** the app runs in an iframe, so it asks monday to show a toast (`notice`) or close its window (`closeAppFeatureModal`).
 - **Not atomic:** mutations in one request run one after another. If one fails, earlier ones stay. Validating first keeps this unlikely.
+
+## 6.5 Status column dialog: transitions, Rest and Evolve
+- **Concepts:** a **Status column** feature with an **on-click dialog** (the context gives `itemId` and `columnId`), the **updates API** (`create_update`), writing column values including the item **name**, and PokéAPI **evolution chains**.
+- **Why:** clicking a cell opens the app inside monday for that one item. The dialog offers only the moves the game rules allow and writes the new status back with `change_multiple_column_values`. Evolve writes the new form's name, sprite, stats and types in the same mutation, leaving level, gym and status alone, and then posts "X evolved into Y" as an update on the item. That history lives in monday, not in the app.
+- **Evolution chain:** PokéAPI returns a tree (`evolves_to`). The app finds the path from the root to the Pokémon. The stage is the number of Gen-1 forms on that path, and the next forms are the children of the last node. A form evolves "by level" only if PokéAPI gives a `min_level`. Chains are cached per chain, because Charmander, Charmeleon and Charizard share one.
+- **In development:** the feature is attached through the Column Center (Development Apps), which adds its own "Status & Evolve" column. That column is only the entry point; the dialog still writes the original Status column.

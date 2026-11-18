@@ -1,6 +1,7 @@
 import mondaySdk from "monday-sdk-js";
 import type {
-  AppContext, BoardConfig, GameApi, Gym, PokeType, Pokemon, PokemonPatch, SpeciesDetail, Status, ThemeName,
+  AppContext, BoardConfig, EvolutionInfo, EvolutionTarget, GameApi, Gym, PokeType, Pokemon, PokemonPatch,
+  SpeciesDetail, Status, ThemeName,
 } from "../GameApi";
 import { SeamlessApiClient } from "@mondaydotcomorg/api";
 
@@ -80,6 +81,13 @@ const BOARDS_QUERY = `
       name
       type
     }
+  }
+`;
+
+// Posts a message in the item's Updates tab (e.g. "Charmander evolved into Charmeleon")
+const CREATE_UPDATE_MUTATION = `
+  mutation ($itemId: ID!, $body: String!) {
+    create_update(item_id: $itemId, body: $body) { id }
   }
 `;
 
@@ -322,6 +330,67 @@ async function loadSpecies(dexNumber: number): Promise<SpeciesDetail> {
 
 // Gen-1 data never changes: fetch each species once per page load
 const speciesCache = new Map<number, Promise<SpeciesDetail>>();
+
+// ---------- Evolution chains (PokéAPI) ----------
+
+// One node of evolution-chain/{id}: a species and the forms it evolves into (a tree)
+interface ChainNode {
+  species: { name: string; url: string };
+  evolution_details: { trigger: { name: string }; min_level: number | null }[];
+  evolves_to: ChainNode[];
+}
+
+// ".../pokemon-species/5/" → 5
+const dexFromUrl = (url: string) => Number(url.split("/").filter(Boolean).pop());
+
+// The path from the chain's root to `dex`: [charmander, charmeleon] for 5
+function pathTo(node: ChainNode, dex: number, path: ChainNode[] = []): ChainNode[] | null {
+  const here = [...path, node];
+  if (dexFromUrl(node.species.url) === dex) return here;
+  for (const child of node.evolves_to) {
+    const found = pathTo(child, dex, here);
+    if (found) return found;
+  }
+  return null;
+}
+
+// A next form → EvolutionTarget. "level-up" only when some game version gives a min_level;
+// friendship, stones and trades all count as "other".
+function toTarget(node: ChainNode): EvolutionTarget {
+  const byLevel = node.evolution_details.find((d) => d.trigger.name === "level-up" && d.min_level !== null);
+  return {
+    dexNumber: dexFromUrl(node.species.url),
+    name: capitalize(node.species.name),
+    trigger: byLevel ? "level-up" : "other",
+    minLevel: byLevel?.min_level ?? null,
+  };
+}
+
+// Several Pokémon share one chain (Charmander, Charmeleon, Charizard) → fetch each chain once
+const chainCache = new Map<string, Promise<{ chain: ChainNode }>>();
+const evolutionCache = new Map<number, Promise<EvolutionInfo>>();
+
+function cachedChain(url: string) {
+  let cached = chainCache.get(url);
+  if (!cached) {
+    cached = fetchJson<{ chain: ChainNode }>(url);
+    chainCache.set(url, cached);
+    cached.catch(() => chainCache.delete(url));
+  }
+  return cached;
+}
+
+async function loadEvolution(dexNumber: number): Promise<EvolutionInfo> {
+  const species = await fetchJson<{ evolution_chain: { url: string } }>(`${POKEAPI}/pokemon-species/${dexNumber}`);
+  const { chain } = await cachedChain(species.evolution_chain.url);
+  const path = pathTo(chain, dexNumber);
+  if (!path) throw new Error(`#${dexNumber} is not in its own evolution chain`);
+  // Stage counts Gen-1 forms only: Pichu (#172, Gen 2) doesn't make Pikachu stage 2
+  const gen1Steps = path.filter((n) => dexFromUrl(n.species.url) <= 151).length;
+  const stage = Math.min(Math.max(gen1Steps, 1), 3) as 1 | 2 | 3;
+  // `next` is NOT filtered to Gen 1, so evolutionCheck can say "outside Gen 1" (Golbat → Crobat)
+  return { stage, next: path[path.length - 1].evolves_to.map(toTarget) };
+}
 // Placeholder for methods we haven't implemented yet
 function notYet(name: string): never {
   throw new Error(`${name}: not implemented yet`);
@@ -410,7 +479,9 @@ export function createMondayGameApi(): GameApi {
     // The Gym connect column: { item_ids: [gymId] }. Two-way connect updates the Gyms board by itself.
     setGym: (pokemonIds, gymId) =>
       writeItems([...new Set(pokemonIds)], (_, col) => ({ [col("Gym")]: { item_ids: [Number(gymId)] } })),
-    postUpdate: () => notYet("postUpdate"),
+    postUpdate: async (itemId, body) => {
+      await client.request(CREATE_UPDATE_MUTATION, { itemId, body });
+    },
     // A toast inside monday (green / red / blue). Fire-and-forget: the contract returns void.
     notify: (message, type) => {
       monday
@@ -433,7 +504,15 @@ export function createMondayGameApi(): GameApi {
       }
       return cached;
     },
-    getEvolution: () => notYet("getEvolution"),
+    getEvolution: (dexNumber) => {
+      let cached = evolutionCache.get(dexNumber);
+      if (!cached) {
+        cached = loadEvolution(dexNumber);
+        evolutionCache.set(dexNumber, cached);
+        cached.catch(() => evolutionCache.delete(dexNumber)); // don't keep failures
+      }
+      return cached;
+    },
     getTypeChart: () => notYet("getTypeChart"),
        talk: async ({ system, user }) => {
       try {
