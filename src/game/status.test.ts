@@ -36,7 +36,10 @@ describe('validateSpar', () => {
     expect(validateSpar([a, a])).toEqual({ ok: false, error: 'DUPLICATE' })
   })
   it('rejects missing gym', () => {
-    expect(validateSpar([a, makePokemon({ id: 'b', gym: null })])).toEqual({ ok: false, error: 'NO_GYM' })
+    const b = makePokemon({ id: 'b', name: 'Bee', gym: null })
+    expect(validateSpar([a, b])).toEqual({ ok: false, error: 'NO_GYM', names: ['Bee'] })
+    const c = makePokemon({ id: 'c', name: 'Cee', gym: null })
+    expect(validateSpar([b, c])).toEqual({ ok: false, error: 'NO_GYM', names: ['Bee', 'Cee'] })
   })
   it('rejects different gyms', () => {
     const other = makePokemon({ id: 'b', gym: { id: 'g2', name: 'Other', type: null } })
