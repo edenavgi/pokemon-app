@@ -1,12 +1,14 @@
 import mondaySdk from "monday-sdk-js";
-import type { AppContext, SpeciesDetail, GameApi, PokeType, Pokemon, Status, ThemeName } from "../GameApi";import { SeamlessApiClient } from "@mondaydotcomorg/api";
+import type { AppContext, GameApi, Gym, PokeType, Pokemon, SpeciesDetail, Status, ThemeName } from "../GameApi";
+import { SeamlessApiClient } from "@mondaydotcomorg/api";
+
 const monday = mondaySdk();
 
 const client = new SeamlessApiClient("2026-10");
 
 const POKEMON_QUERY = `
-  query ($itemId: ID!) {
-    items(ids: [$itemId]) {
+    query ($itemIds: [ID!]) {
+    items(ids: $itemIds, limit: 100) {
       id
       name
       column_values {
@@ -30,6 +32,28 @@ const TALK_MUTATION = `
   }
 `;
 
+
+const GYMS_QUERY = `
+  query ($boardIds: [ID!]) {
+    boards(ids: $boardIds) {
+      items_page(limit: 500) {
+        cursor
+        items {
+          id
+          name
+          column_values {
+            text
+            column { title }
+            ... on DropdownValue { values { label } }
+            ... on BoardRelationValue { linked_item_ids }
+            ... on MirrorValue { display_value }
+          }
+        }
+      }
+    }
+  }
+`;
+
 // The shape of one column value, as we saw it in the console
 interface ColumnValue {
   text: string | null;
@@ -46,13 +70,18 @@ interface PokemonItem {
   column_values: ColumnValue[];
 }
 
-function toPokemon(item: PokemonItem): Pokemon {
-  const byTitle = new Map(item.column_values.map((cv) => [cv.column.title, cv]));
-  const col = (title: string): ColumnValue => {
+// Returns col(title): the column value with that title, or a clear error if the board lacks it
+function columnReader(columnValues: ColumnValue[], board: string) {
+  const byTitle = new Map(columnValues.map((cv) => [cv.column.title, cv]));
+  return (title: string): ColumnValue => {
     const cv = byTitle.get(title);
-    if (!cv) throw new Error(`Pokemon board: missing column "${title}"`);
+    if (!cv) throw new Error(`${board} board: missing column "${title}"`);
     return cv;
   };
+}
+
+function toPokemon(item: PokemonItem): Pokemon {
+  const col = columnReader(item.column_values, "Pokemon");
   const num = (title: string) => Number(col(title).text) || 0;
 
   const sprite = col("Sprite").value;
@@ -81,6 +110,50 @@ function toPokemon(item: PokemonItem): Pokemon {
       : null,
   };
 }
+
+async function fetchPokemon(itemIds: string[]): Promise<Pokemon[]> {
+  if (itemIds.length === 0) return []; // nothing to ask for
+  if (itemIds.length > 100) console.warn(`[fetchPokemon] ${itemIds.length} ids; only the first 100 are fetched`);
+  const res = await client.request<{ data: { data: { items: PokemonItem[] } } }>(
+    POKEMON_QUERY,
+    { itemIds },
+  );
+  return res.data.data.items.map(toPokemon);
+}
+
+interface GymItem {
+  id: string;
+  name: string;
+  column_values: ColumnValue[];
+}
+
+// "5, 7" → [5, 7]; "" → []
+function parseMirroredNumbers(text?: string): number[] {
+  if (!text) return [];
+  return text
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part !== "")
+    .map(Number)
+    .filter(Number.isFinite);
+}
+
+const rosterIds = (gym: GymItem) =>
+  columnReader(gym.column_values, "Gyms")("Pokemon").linked_item_ids ?? [];
+
+function toGym(item: GymItem, pokemonById: Map<string, Pokemon>): Gym {
+  const col = columnReader(item.column_values, "Gyms");
+  return {
+    id: item.id,
+    name: item.name,
+    type: (col("Type").values?.[0]?.label ?? null) as PokeType | null,
+    roster: rosterIds(item)
+      .map((id) => pokemonById.get(id))
+      .filter((p): p is Pokemon => p !== undefined),
+    mirroredLevels: parseMirroredNumbers(col("Level (mirror)").display_value),
+  };
+}
+
 // ---------- PokéAPI ----------
 const POKEAPI = "https://pokeapi.co/api/v2";
 
@@ -162,18 +235,28 @@ export function createMondayGameApi(): GameApi {
     listBoards: () => notYet("listBoards"),
     getBoardConfig: () => notYet("getBoardConfig"),
     setBoardConfig: () => notYet("setBoardConfig"),
-         getPokemon: async (itemId) => {
-      const res = await client.request<{ data: { data: { items: PokemonItem[] } } }>(
-        POKEMON_QUERY,
-        { itemId },
-      );
-      const item = res.data.data.items[0];
-      if (!item) throw new Error(`Pokémon item ${itemId} not found`);
-      return toPokemon(item);
+    getPokemon: async (itemId) => {
+      const [pokemon] = await fetchPokemon([itemId]);
+      if (!pokemon) throw new Error(`Pokémon item ${itemId} not found`);
+      return pokemon;
     },
-    getPokemonMany: () => notYet("getPokemonMany"),
+    getPokemonMany: (itemIds) => fetchPokemon(itemIds),
     listPokemon: () => notYet("listPokemon"),
-    listGyms: () => notYet("listGyms"),
+    listGyms: async (opts) => {
+      const res = await client.request<{
+        data: { data: { boards: { items_page: { cursor: string | null; items: GymItem[] } }[] } };
+      }>(GYMS_QUERY, { boardIds: opts?.boardIds });
+
+      const pages = res.data.data.boards.map((b) => b.items_page);
+      if (pages.some((p) => p.cursor)) console.warn("[listGyms] a board has more than 500 gyms; only the first 500 are shown");
+      const gymItems = pages.flatMap((p) => p.items);
+
+      // ONE query for every Pokémon of every gym
+      const allIds = [...new Set(gymItems.flatMap(rosterIds))];
+      const pokemonById = new Map((await fetchPokemon(allIds)).map((p) => [p.id, p]));
+
+      return gymItems.map((g) => toGym(g, pokemonById));
+    },
     getGym: () => notYet("getGym"),
     createGym: () => notYet("createGym"),
     recruit: () => notYet("recruit"),
@@ -208,6 +291,7 @@ export function createMondayGameApi(): GameApi {
         console.warn("[talk] run_prompt failed", (e as { response?: unknown }).response ?? e);
         throw e;
       }
-    }, };
+    },
+   };
   return api;
 }
