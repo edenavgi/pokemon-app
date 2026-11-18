@@ -92,3 +92,11 @@ mutation ($prompt: String!, $config: RunPromptConfigInput) {
 - **Global** storage (`monday.storage.*`) is scoped to account + app and shared by every feature instance. `monday.storage.instance.*` is per instance and resets on a new major version.
 - The widget's connected boards (dashboard "connected boards") arrive in the context as `boardIds` and change live when boards are added or removed. Checked with one board (Gyms only → hint) and with two.
 - A feature's **Custom URL** in Developer Center → View Setup is only kept once it is saved for the feature. An empty field on reload means the URL was never stored, and the widget renders blank.
+
+## 8. Writing column values and board menu actions (Task 18, 2026-11-18)
+- `change_multiple_column_values(board_id, item_id, column_values: JSON!)` takes **column IDs** as keys and a **JSON string** as the value. The IDs come from `items(ids) { board { id columns { id title } } }`, so nothing is hardcoded. Several items go in one request with aliases (`w0:`, `w1:`).
+- Formats used: number `"6"`, status `{"label":"Ready"}`, dropdown `{"labels":["Fire"]}`, link `{"url","text"}`, connect `{"item_ids":[<gymId>]}`.
+- **Connect boards write replaces** the links rather than appending (the docs don't say). Seen: Transfer moved Charmander from Cinnabar to Cerulean, and the Gym cell then showed only Cerulean. The two-way link updated the Gyms board by itself.
+- Board **multi-item menu** features of an uninstalled (development) app do **not** appear in the Apps list of the selection bar, but they **do** appear when you search for the feature's name ("Transfer to gym", "Spar selected").
+- `monday.execute("notice", { message, type, timeout })` shows the toast. `closeAppFeatureModal` closes the multi-item menu window.
+- Not yet verified: whether `"name"` in `column_values` renames the item (needed for evolution, Task 20).
