@@ -95,3 +95,18 @@ export const transferText = {
   gymMeta: (type: string | null, count: number) => `${type ?? 'No type'} · ${count} Pokémon`,
   success: (names: string[], gym: string) => `Moved ${list(names)} to ${gym}.`,
 } as const
+
+export const statusDialogText = {
+  title: 'Change status',
+  notInItem: 'Open this view from a Pokémon status cell',
+  moveTo: (status: string) => `Move to ${status}`,
+  rest: 'Rest',
+  evolve: 'Evolve',
+  evolving: 'Evolving…',
+  evolveTo: (name: string) => `→ ${name}`,
+  evoLoadFailed: 'Could not check evolution right now.',
+  statusSuccess: (name: string, status: string) => `${name} is now ${status}.`,
+  restSuccess: (name: string) => `${name} rested and is ready to go again.`,
+  evolveSuccess: (from: string, to: string) => `${from} evolved into ${to}!`,
+  updateFailed: 'Evolved, but could not post the update on the item.',
+} as const
