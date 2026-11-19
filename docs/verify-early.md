@@ -46,7 +46,7 @@ Not present in an item view: `columnId`, `selectedPulsesIds`.
 | Dashboard widget (Gym Stats) | `boardIds` → `widgetBoardIds` | Changes live when the dashboard's connected boards change (§7). Added via Add widget → Development Apps. |
 | Board multi-item menu (Spar selected / Transfer to gym) | `selectedPulsesIds` → `selectedItemIds`, `boardId` | Found by **searching the feature name** in the selection bar's Apps menu (§8). |
 | Status column dialog | `itemId`, `columnId`, `boardId` | See above. |
-| Custom object (Gym HQ) | — | Not built (Tasks 21–22 not done). |
+| Board view (Gym HQ View) | — (uses the saved board config) | Gym HQ is a **board view** instead of a custom object (§10). Opened from Views Center → Development Apps. |
 
 ## 2. Column value shapes (GraphQL)
 
@@ -126,3 +126,32 @@ mutation ($prompt: String!, $config: RunPromptConfigInput) {
 - Checked live against PokéAPI: 4 → stage 1, next Charmeleon (level-up@16); 5 → stage 2; 6 → stage 3, none; 25 → stage 1, Raichu other; 133 → stage 1, 8 options; 42 → stage 2, Crobat other; 1 → stage 1, Ivysaur.
 - The game's thresholds come from the spec (stage 1→2 at level 3, 2→3 at level 6). PokéAPI's `min_level` only tells whether a form evolves by level.
 - `create_update(item_id: ID, body: String!) { id }` posts in the item's Updates tab. Seen: "Charmander evolved into Charmeleon".
+
+## 10. Gym HQ: the custom object needs an installed app (Task 22, 2026-11-19)
+The app's **Object** feature ("Gym HQ", key `moveogroup_pokemon-gym-manager::gym-hq`) shows up in the workspace **+ → Apps** menu and in `object_types_unique_keys`, but it **can't be added** while the app is not installed. Listed doesn't mean creatable.
+- **UI:** + → Apps → Gym HQ sends `POST /accounts/add_board_template` (`app_feature_id`, `template_board_id`, `workspace_id`, `folder_id`) → **403 Forbidden** with an empty body. The user sees the toast "contact the developer".
+- **API:** `create_object(name, privacy_kind, object_type_unique_key, workspace_id, owner_ids)` → `INTERNAL_SERVER_ERROR`.
+  - Same result with or without `workspace_id`, in 2026-07 and 2026-10, from the Playground and from the iframe.
+  - request_ids: `db7774d5-60c8-9648-9a4f-22fa1eb15046`, `71fa94e0-c022-9ff2-838e-ac83b053d869`, `f09eb29c-fd73-9548-958d-0a4f2dc4264c`, `99635cee-797d-9c60-82f5-b8785c267ea6`.
+- **Not Gym HQ's settings:** a brand-new default Object feature failed the same way (`0445834d-1134-9684-a3f4-5936e01e5724`; the probe feature was deleted afterwards). The build URL (tunnel or zip upload) doesn't matter either: creation fails before any URL loads.
+- **Not a board permission:** the same user created the Pokemon board in the same folder.
+- **What works:** an *installed* moveogroup app's object ("Developer Course") lives in the same workspace. The docs add objects from **+ → Apps → Installed** (developer.monday.com/apps/docs/custom-objects).
+- Every other feature type (item view, board view, widget, multi-item menu, status column) works **without** an install. A custom object is the first one that doesn't: it creates a new workspace entity from a template, instead of being added to an existing board.
+- **In our Enterprise account only admins install apps.** Decision (Eden, 2026-11-19): Gym HQ is the board view **"Gym HQ View"** for good (same `#/gym-hq` route, no code change), and the Object feature was deleted from the Developer Center. A new development view appeared in Views Center only after a hard refresh (Cmd+Shift+R).
+- Not verified: that an install would make the object creatable (we stopped before asking an admin).
+
+## 11. Creating items and the Gen-1 list (Task 22, 2026-11-19)
+- **`create_item(board_id, item_name, column_values: JSON!)`:** `column_values` is a JSON **string** keyed by column ID, the same write formats as §8. The IDs come from `boards(ids) { columns { id title } }`, matched by title.
+  - The board comes from the saved board config: `createGym`/`recruit` don't get a board ID from the screen.
+- **createGym:** `{ "<Type>": { "labels": ["Rock"] } }`. The Gyms `Type` dropdown has all 18 labels and `label_limit_count: 1`, so no `create_labels_if_missing` is needed.
+- **recruit:** ONE `create_item` writes the species (number, types, sprite, stats), `Level` 1, `Energy` 3, `Status` "Recruited" and the gym link `{ "item_ids": [<gymId>] }`.
+  - The mutation asks for the Pokémon fields **in its response** (`create_item(…) { id name column_values {…} }`), so the new item comes back without a second query.
+  - The two-way connect adds it to the gym's `Pokemon` column by itself.
+  - The Pokémon board's `Types` dropdown allows 2 labels; `Status` already has "Recruited".
+- **PokéAPI `type/{name}`** returns both the type's `damage_relations` (`double_damage_to` / `half_damage_to` / `no_damage_to` → 2 / 0.5 / 0) and `pokemon[]` (`{ slot, pokemon: { name, url } }`, slot 1 = primary type).
+  - The 18 type lists cover **all 151** Gen-1 Pokémon (67 have two types). So `getTypeChart` and `listGen1` share 18 requests instead of 151+.
+  - Ids above 151 (later generations, alternate forms like `rotom-heat` 10008) are skipped.
+  - Names are the slug capitalized, except `nidoran-f` → "Nidoran♀", `nidoran-m` → "Nidoran♂", `mr-mime` → "Mr. Mime", `farfetchd` → "Farfetch’d" (the English names `pokemon-species` gives).
+  - The sprite is `…/sprites/pokemon/{n}.png`, the same URL as `front_default`.
+- **Cache:** memory (one Promise per page load), then global SDK storage (`pokeapi:typeChart:v1`, `pokeapi:gen1:v1`), then PokéAPI.
+  - Checked in monday: the first visit to Recruit makes 18 `type/…` requests; after a reload, none.

@@ -32,9 +32,11 @@ For each feature: which monday concept it uses and why. Details of the real data
 - **Evolution chain:** PokéAPI returns a tree (`evolves_to`). The app finds the path from the root to the Pokémon. The stage is the number of Gen-1 forms on that path, and the next forms are the children of the last node. A form evolves "by level" only if PokéAPI gives a `min_level`. Chains are cached per chain, because Charmander, Charmeleon and Charizard share one.
 - **In development:** the feature is attached through the Column Center (Development Apps), which adds its own "Status & Evolve" column. That column is only the entry point; the dialog still writes the original Status column.
 
-## 6.6 Custom object: Gym HQ (not built)
-- **Status:** not started. Plan Tasks 21 (screen) and 22 (connection) are open.
-- **Concepts it would use:** custom object feature (a standalone page in the left menu), `create_item` with a Connect boards value (recruit), `create_update` on both gyms (battle log), and PokéAPI type damage relations (`getTypeChart`). The pure rules are already written and tested in `src/game/` (`battle`, `canJoinGym`, `validateTransfer`).
+## 6.6 Gym HQ: create gym, recruit, battle
+- **Concepts:** **`create_item`** with column values (a dropdown for the gym's type; numbers, dropdown, link, status and a **Connect boards** value for a recruit), `create_update` on both gyms (battle log), PokéAPI **type** lists (damage relations + the Pokémon of each type), and SDK **global storage as a cache**.
+- **Why one mutation per recruit:** the new Pokémon item gets its stats, its starting level/energy/status and its gym link in a single `create_item`, and the same request reads the new item back. The two-way Connect column then adds it to the gym's roster by itself. There's no half-created Pokémon without a gym.
+- **Why 18 requests, not 151:** each `type/{name}` response lists every Pokémon of that type, so the 18 types give both the type chart (for battles) and the types of all 151 Gen-1 Pokémon (for the Recruit grid). The result is saved in global storage, so later visits don't call PokéAPI at all.
+- **Feature type:** it was designed as a **custom object** (a standalone page in the workspace menu). A custom object can't be added until the app is **installed**, and only admins install apps in our account (`verify-early.md` §10). **Decision (2026-11-19): Gym HQ is a board view ("Gym HQ View") on the Gyms board, for good.** The custom object feature was deleted from the Developer Center. The screen reads the boards from the saved board config, not from the context, so it doesn't care where it is opened.
 
 ## Summary: which monday concept each feature uses
 
@@ -46,4 +48,4 @@ For each feature: which monday concept it uses and why. Details of the real data
 | 6.3 Stats widget | Dashboard widget | widget context `boardIds`, SDK global storage, `boards` list | ✅ works (1 and 2 boards) |
 | 6.4 Spar / Transfer | Board multi-item menu | `selectedPulsesIds`, `change_multiple_column_values` with aliases, `execute("notice")`, `closeAppFeatureModal` | ✅ works |
 | 6.5 Status & Evolve | Status column (on-click dialog) | column context, writes incl. item `name`, `create_update`, PokéAPI evolution chains | ✅ works |
-| 6.6 Gym HQ | Custom object | `create_item`, Connect write, updates, type chart | ❌ not built |
+| 6.6 Gym HQ | Board view (instead of a custom object) | `create_item` with a Connect write, updates, PokéAPI type lists, storage cache | ✅ works as a board view |

@@ -1,8 +1,10 @@
 import mondaySdk from "monday-sdk-js";
 import type {
-  AppContext, BoardConfig, EvolutionInfo, EvolutionTarget, GameApi, Gym, PokeType, Pokemon, PokemonPatch,
-  SpeciesDetail, Status, ThemeName,
+  AppContext, BoardConfig, Effectiveness, EvolutionInfo, EvolutionTarget, GameApi, Gym, PokeType, Pokemon,
+  PokemonPatch, SpeciesDetail, SpeciesSummary, Status, ThemeName, TypeChart,
 } from "../GameApi";
+import { POKE_TYPES } from "../GameApi";
+import { MAX_ENERGY, START_LEVEL } from "../../game/constants";
 import { SeamlessApiClient } from "@mondaydotcomorg/api";
 
 const monday = mondaySdk();
@@ -263,6 +265,52 @@ async function writeItems(
   await client.request(`mutation (${declarations}) {\n    ${fields}\n  }`, variables);
 }
 
+// ---------- Creating items ----------
+
+// A board's columns, to translate titles → IDs before creating an item on it
+const BOARD_COLUMNS_QUERY = `
+  query ($boardId: ID!) {
+    boards(ids: [$boardId]) { columns { id title } }
+  }
+`;
+
+// `fields`: what to read back from the new item in the same request
+const createItemMutation = (fields: string) => `
+  mutation ($boardId: ID!, $name: String!, $values: JSON!) {
+    create_item(board_id: $boardId, item_name: $name, column_values: $values) { ${fields} }
+  }
+`;
+
+// col("Type") → that column's ID on the board, or a clear error if the board lacks it
+async function columnIdsOf(boardId: string, board: string): Promise<ColumnIdOf> {
+  const res = await client.request<{ data: { data: { boards: { columns: { id: string; title: string }[] }[] } } }>(
+    BOARD_COLUMNS_QUERY,
+    { boardId },
+  );
+  const columns = res.data.data.boards[0]?.columns;
+  if (!columns) throw new Error(`${board} board ${boardId} not found`);
+  const idByTitle = new Map(columns.map((c) => [c.title, c.id]));
+  return (title) => {
+    const id = idByTitle.get(title);
+    if (!id) throw new Error(`${board} board: missing column "${title}"`);
+    return id;
+  };
+}
+
+// Creates one item with its column values ({ columnId: value }) in ONE request
+async function createItem<T = { id: string; name: string }>(
+  boardId: string,
+  name: string,
+  values: Record<string, unknown>,
+  fields = "id name",
+): Promise<T> {
+  const res = await client.request<{ data: { data: { create_item: T } } }>(
+    createItemMutation(fields),
+    { boardId, name, values: JSON.stringify(values) }, // column_values is a JSON *string*
+  );
+  return res.data.data.create_item;
+}
+
 // Number columns: patch field → column title
 const NUMBER_COLUMNS = {
   dexNumber: "Pokédex number", hp: "HP", attack: "Attack", defense: "Defense",
@@ -391,6 +439,103 @@ async function loadEvolution(dexNumber: number): Promise<EvolutionInfo> {
   // `next` is NOT filtered to Gen 1, so evolutionCheck can say "outside Gen 1" (Golbat → Crobat)
   return { stage, next: path[path.length - 1].evolves_to.map(toTarget) };
 }
+
+// ---------- Types and the Gen-1 list (PokéAPI + SDK storage) ----------
+
+// One type/{name} response gives BOTH that type's damage row AND every Pokémon of that type
+interface PokeApiType {
+  name: string;
+  damage_relations: Record<"double_damage_to" | "half_damage_to" | "no_damage_to", { name: string }[]>;
+  pokemon: { slot: number; pokemon: { name: string; url: string } }[]; // slot 1 = primary type
+}
+
+// Same URL as pokemon/{n}.sprites.front_default, so the grid needs no request per Pokémon
+const SPRITES = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon";
+
+// The only Gen-1 slugs whose English name isn't the slug capitalized (as getSpecies shows them)
+const SPECIAL_NAMES: Record<string, string> = {
+  "nidoran-f": "Nidoran♀", "nidoran-m": "Nidoran♂", "mr-mime": "Mr. Mime", farfetchd: "Farfetch’d",
+};
+
+// Global SDK storage keys. Bump the version if the stored shape changes.
+const TYPE_CHART_KEY = "pokeapi:typeChart:v1";
+const GEN1_KEY = "pokeapi:gen1:v1";
+
+// Keeps one Promise per page load; a failed one is dropped so the next call retries
+function once<T>(load: () => Promise<T>): () => Promise<T> {
+  let cached: Promise<T> | undefined;
+  return () => {
+    if (!cached) {
+      cached = load();
+      cached.catch(() => (cached = undefined));
+    }
+    return cached;
+  };
+}
+
+// A JSON value from global SDK storage; if it isn't there, compute it, save it and return it.
+// Storage problems never break the screen: they only cost a refetch.
+async function storageCached<T>(key: string, compute: () => Promise<T>): Promise<T> {
+  try {
+    const raw = (await monday.storage.getItem(key)).data?.value;
+    if (raw) return JSON.parse(raw) as T;
+  } catch (e) {
+    console.warn(`[storage] could not read ${key}`, e);
+  }
+  const value = await compute();
+  monday.storage
+    .setItem(key, JSON.stringify(value))
+    .catch((e: unknown) => console.warn(`[storage] could not save ${key}`, e));
+  return value;
+}
+
+// 18 requests in parallel, shared by getTypeChart and listGen1
+const loadTypes = once(() =>
+  Promise.all(POKE_TYPES.map((t) => fetchJson<PokeApiType>(`${POKEAPI}/type/${t.toLowerCase()}`))),
+);
+
+// chart[attacker][defender]: 2, 0.5 or 0; a missing entry means 1
+function toTypeChart(types: PokeApiType[]): TypeChart {
+  const chart = {} as TypeChart;
+  for (const t of types) {
+    const row: Partial<Record<PokeType, Effectiveness>> = {};
+    const set = (targets: { name: string }[], value: Effectiveness) =>
+      targets.forEach((d) => (row[capitalize(d.name) as PokeType] = value));
+    set(t.damage_relations.double_damage_to, 2);
+    set(t.damage_relations.half_damage_to, 0.5);
+    set(t.damage_relations.no_damage_to, 0);
+    chart[capitalize(t.name) as PokeType] = row;
+  }
+  return chart;
+}
+
+// Turns the 18 type lists around: dex → its name and its types (primary first)
+function toGen1(types: PokeApiType[]): SpeciesSummary[] {
+  const byDex = new Map<number, { slug: string; types: { slot: number; type: PokeType }[] }>();
+  for (const t of types) {
+    for (const { slot, pokemon } of t.pokemon) {
+      const dex = dexFromUrl(pokemon.url);
+      if (dex > 151) continue; // later generations and alternate forms (ids 10000+)
+      const entry = byDex.get(dex) ?? { slug: pokemon.name, types: [] };
+      entry.types.push({ slot, type: capitalize(t.name) as PokeType });
+      byDex.set(dex, entry);
+    }
+  }
+  if (byDex.size !== 151) console.warn(`[listGen1] expected 151 Pokémon, got ${byDex.size}`);
+  return [...byDex.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([dexNumber, e]) => ({
+      dexNumber,
+      name: SPECIAL_NAMES[e.slug] ?? capitalize(e.slug),
+      types: e.types.sort((a, b) => a.slot - b.slot).map((x) => x.type),
+      spriteUrl: `${SPRITES}/${dexNumber}.png`,
+    }));
+}
+
+// Memory first (same page), then SDK storage (later visits), then PokéAPI (first visit only)
+const loadTypeChart = once(() => storageCached(TYPE_CHART_KEY, async () => toTypeChart(await loadTypes())));
+const loadGen1 = once(() => storageCached(GEN1_KEY, async () => toGen1(await loadTypes())));
+
 // Placeholder for methods we haven't implemented yet
 function notYet(name: string): never {
   throw new Error(`${name}: not implemented yet`);
@@ -470,8 +615,32 @@ export function createMondayGameApi(): GameApi {
       return gymItems.map((g) => toGym(g, pokemonById));
     },
     getGym: () => notYet("getGym"),
-    createGym: () => notYet("createGym"),
-    recruit: () => notYet("recruit"),
+    // A new item on the Gyms board from the saved config. Type is a dropdown: written by label.
+    createGym: async ({ name, type }) => {
+      const cfg = await api.getBoardConfig();
+      if (!cfg) throw new Error("Choose the Gyms and Pokémon boards first");
+      const col = await columnIdsOf(cfg.gymsBoardId, "Gyms");
+      const item = await createItem(cfg.gymsBoardId, name, { [col("Type")]: { labels: [type] } });
+      return { id: item.id, name: item.name, type, roster: [], mirroredLevels: [] }; // a new gym has no Pokémon yet
+    },
+    // A new item on the Pokémon board: species stats + starting level/energy/status + the link to its gym,
+    // all in ONE create_item. It reads the new item back in the same request (POKEMON_FIELDS → toPokemon).
+    recruit: async ({ species, gymId }) => {
+      const cfg = await api.getBoardConfig();
+      if (!cfg) throw new Error("Choose the Gyms and Pokémon boards first");
+      const col = await columnIdsOf(cfg.pokemonBoardId, "Pokemon");
+      const { name: _itemName, ...values } = patchToColumnValues( // the name goes in item_name
+        {
+          name: species.name, dexNumber: species.dexNumber, types: species.types, spriteUrl: species.spriteUrl,
+          hp: species.hp, attack: species.attack, defense: species.defense, speed: species.speed,
+          level: START_LEVEL, energy: MAX_ENERGY, status: "Recruited",
+        },
+        col,
+      );
+      values[col("Gym")] = { item_ids: [Number(gymId)] }; // connect boards: same format as setGym
+      const item = await createItem<PokemonItem>(cfg.pokemonBoardId, species.name, values, POKEMON_FIELDS);
+      return toPokemon(item);
+    },
     updatePokemon: async (patches) => {
       const patchById = new Map(patches.map((p) => [p.id, p.patch]));
       await writeItems([...patchById.keys()], (itemId, col) => patchToColumnValues(patchById.get(itemId)!, col));
@@ -494,7 +663,7 @@ export function createMondayGameApi(): GameApi {
         .execute("closeAppFeatureModal")
         .catch((e: unknown) => console.warn("[closeFeature] could not close the feature window", e));
     },
-    listGen1: () => notYet("listGen1"),
+    listGen1: loadGen1,
     getSpecies: (dexNumber) => {
       let cached = speciesCache.get(dexNumber);
       if (!cached) {
@@ -513,7 +682,7 @@ export function createMondayGameApi(): GameApi {
       }
       return cached;
     },
-    getTypeChart: () => notYet("getTypeChart"),
+    getTypeChart: loadTypeChart,
        talk: async ({ system, user }) => {
       try {
         const res = await client.request<{ data: { data: { run_prompt: { content: string } } } }>(
