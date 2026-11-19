@@ -449,6 +449,7 @@ Split into 3 sub-tasks with a commit after each. Everything is wrapped in `Requi
 - [ ] 🧑 Eden: go through the acceptance criteria for 6.1–6.7 again, this time without the tunnel (`npm run dev` stopped).
 - [ ] 🧑 Eden: complete `docs/concepts.md` for each of the 7 features: which monday concept and why.
 - **Done when:** every item in section 9 of the spec ("Done when") is checked.
+- **Done (2026-11-19):** the push runs in GitHub Actions (`deploy.yml`) on every merge to `main`. Each feature was pointed at monday code with `app-features:build --buildType monday_code_cdn --customUrl "#/<route>"`. Eden checked 6.1–6.7 in monday with the tunnel stopped. `verify-early.md` §12 has the details.
 
 ---
 
