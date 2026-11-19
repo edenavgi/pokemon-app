@@ -69,6 +69,8 @@ npm run typecheck
 npm run build
 ```
 
+GitHub Actions runs the same checks, plus `npm run lint`, on every PR and every push to `main` (`.github/workflows/ci.yml`).
+
 ## Docs
 
 - `docs/concepts.md`: which monday concept each feature uses, and why.
