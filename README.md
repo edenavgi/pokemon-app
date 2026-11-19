@@ -14,7 +14,7 @@ Built with React + TypeScript + Vite, shadcn/ui + Tailwind, `monday-sdk-js`, `@m
 | 6.3 | Dashboard widget: gym and status stats | `#/widget` | ✅ works in monday (one or both boards) |
 | 6.4 | Board multi-item menu: Spar / Transfer | `#/spar`, `#/transfer` | ✅ works in monday |
 | 6.5 | Status column dialog: transitions, Rest, Evolve | `#/column-view` | ✅ works in monday |
-| 6.6 | Custom object: Gym HQ (create gym, recruit, battle) | `#/gym-hq` | ❌ not built (plan Tasks 21–22) |
+| 6.6 | Gym HQ: create gym, recruit, battle | `#/gym-hq` | ✅ works in monday as a board view ("Gym HQ View"), by decision instead of a custom object |
 | — | Deploy to monday code | — | ❌ not done (plan Task 23); runs from a dev tunnel |
 
 ## How it is built
@@ -42,6 +42,7 @@ npm run dev            # http://localhost:5173
 - `http://localhost:5173/#/widget?mock=1&widgetBoardIds=b1,b2`
 - `http://localhost:5173/#/spar?mock=1&selectedItemIds=p1,p2`
 - `http://localhost:5173/#/column-view?mock=1&itemId=p1`
+- `http://localhost:5173/#/gym-hq?mock=1`
 
 **Inside monday (development):**
 ```bash
@@ -56,13 +57,14 @@ Set each feature's URL in the Developer Center to `<tunnel URL>/#/<route>` and *
 | Dashboard widget | Add widget → **Development Apps** |
 | Multi-item menu | select items → Apps → **search the feature name** |
 | Status column | Add column **+** → More columns → Column Center → **Development Apps** → Add to board |
+| Gym HQ (as a board view) | on the Gyms board: Views **+** → Explore more views → **Development Apps** → "Gym HQ View" → Open in board. A new view shows up only after a hard refresh |
 
 The app needs OAuth scopes (Developer Center → Build → OAuth & permissions). See `docs/verify-early.md` §3.
 
 ## Checks
 
 ```bash
-npx vitest run        # 186 tests
+npx vitest run        # 214 tests
 npm run typecheck
 npm run build
 ```
@@ -70,13 +72,12 @@ npm run build
 ## Docs
 
 - `docs/concepts.md`: which monday concept each feature uses, and why.
-- `docs/verify-early.md`: what monday and PokéAPI really return (context, column value shapes, write formats, storage, run_prompt, evolution chains).
+- `docs/verify-early.md`: what monday and PokéAPI really return (context, column value shapes, write formats, storage, run_prompt, evolution chains, custom objects, creating items, type lists).
 - `docs/GIT_WORKFLOW.md`: branches, commits and PRs.
 - `docs/superpowers/specs/…-design.md` and `docs/superpowers/plans/…md`: the design and the task-by-task plan.
 
 ## Open items
 
-- Gym HQ (6.6): plan Tasks 21–22.
 - Deploy to monday code: plan Task 23.
 - Trim the OAuth scopes to the minimum before anyone installs the app.
 - `listPokemon` filters gym/status client-side; server-side `query_params` would need the Status column ID.

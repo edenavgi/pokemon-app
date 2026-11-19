@@ -439,6 +439,7 @@ Split into 3 sub-tasks with a commit after each. Everything is wrapped in `Requi
 ### Task 22 🧑 Eden: Connect Gym HQ
 - [ ] Implement `createGym` (`create_item` with the dropdown), `recruit` (`create_item` with all the columns + a connect value to the gym in **one** mutation), `listGen1` (`pokemon?limit=151` + types: think about how to avoid 151 requests every time. **Cache in SDK storage**), `getTypeChart` (18 `type/{name}` requests → `damage_relations` → cache).
 - [ ] Acceptance (6.6): all the criteria in the spec, including that PokéAPI isn't fetched again on a second visit (check the Network tab).
+- **Change (2026-11-19):** the custom object can't be added until the app is installed (admins only in our account, `verify-early.md` §10). Decision: Gym HQ is a board view, "Gym HQ View", on the same `#/gym-hq` route, for good. The Object feature was deleted from the Developer Center.
 
 # Part 5: Deploy and finish
 

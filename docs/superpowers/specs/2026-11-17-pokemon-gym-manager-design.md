@@ -123,7 +123,7 @@ Screens never assume the raw monday shapes. Mapping mirror/connect/dropdown JSON
 | 6.3 | Widget: stats | per-gym table (count, avg level), per-status counts; works with 1 or 2 boards |
 | 6.4 | BoardMenu: Spar / Transfer | modal: validation result, confirm; transfer = gym picker with disabled reasons; errors via `api.notify` |
 | 6.5 | ColumnView: Status dialog | allowed transitions, Rest button, Evolve button (with a preview of the next form); writes via `api.updatePokemon`, then `api.postUpdate` |
-| 6.6 | GymHQ | tabs: Gyms (create + browse rosters), Recruit (search + type filter + gym picker with rule errors), Arena (two gyms → Battle → round table, winner highlighted → post update to both) |
+| 6.6 | GymHQ | tabs: Gyms (create + browse rosters), Recruit (search + type filter + gym picker with rule errors), Arena (two gyms → Battle → round table, winner highlighted → post update to both). Built as a **board view**, not a custom object (decision 2026-11-19: custom objects need an install, `verify-early.md` §10) |
 
 Every screen has loading, empty and error states, uses shadcn components and follows the monday theme (light/dark) from context.
 
