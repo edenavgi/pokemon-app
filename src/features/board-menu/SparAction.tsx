@@ -27,6 +27,7 @@ function Spar({ cfg, boardId, ids }: { cfg: BoardConfig; boardId?: string; ids: 
   const selected = data?.selected
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<Error>()
+  const [done, setDone] = useState<string>()
 
   let invalidText: string | undefined
   if (wrongBoard) invalidText = selectionText.wrongBoard
@@ -38,6 +39,16 @@ function Spar({ cfg, boardId, ids }: { cfg: BoardConfig; boardId?: string; ids: 
     }
   }
   useNotifyError(invalidText)
+
+  // Written and asked monday to close; if the window stays open, say what happened instead of "Saving…"
+  if (done) {
+    return (
+      <div className="flex flex-col gap-3 p-4">
+        <h2 className="font-medium">{t.title}</h2>
+        <p role="status" className="text-sm">{done}</p>
+      </div>
+    )
+  }
 
   if (invalidText) {
     return (
@@ -56,7 +67,13 @@ function Spar({ cfg, boardId, ids }: { cfg: BoardConfig; boardId?: string; ids: 
     setSaving(true)
     setSaveError(undefined)
     try {
-      await api.updatePokemon(patches)
+      // The preview may be old: someone could have sparred or rested one of them since the window opened.
+      // Re-read both, re-check the rules, and write values computed from what is on the board NOW.
+      const fresh = await api.getPokemonMany(selected.map((p) => p.id))
+      const v = validateSpar(fresh)
+      if (fresh.length !== selected.length) throw new Error(selectionText.notLoaded)
+      if (!v.ok) throw new Error(sparErrorText(v.error, v.names))
+      await api.updatePokemon(fresh.map((p) => ({ id: p.id, patch: applySpar(p) })))
     } catch (e) {
       const err = e instanceof Error ? e : new Error(String(e))
       setSaveError(err)
@@ -64,7 +81,9 @@ function Spar({ cfg, boardId, ids }: { cfg: BoardConfig; boardId?: string; ids: 
       setSaving(false)
       return
     }
-    api.notify(t.success(selected[0].name, selected[1].name), 'success')
+    const message = t.success(selected[0].name, selected[1].name)
+    api.notify(message, 'success')
+    setDone(message)
     api.closeFeature()
   }
 

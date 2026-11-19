@@ -42,5 +42,9 @@ export function allowedTransitions(p: Pokemon): { to: Status[]; canRest: boolean
       return { to: ['Training', 'Resting'], canRest: false }
     case 'Resting':
       return { to: [], canRest: true }
+    default:
+      // The cell holds a label the game doesn't know, or is empty (edited by hand in monday).
+      // The dialog is the only way back, so offer Training and Rest instead of crashing.
+      return { to: ['Training'], canRest: true }
   }
 }

@@ -44,6 +44,9 @@ describe('effectiveness', () => {
   it('is 1 for an empty defender', () => {
     expect(effectiveness(['Fire'], [], chart)).toBe(1)
   })
+  it('is 1 for an attacker without types (e.g. an empty Types cell)', () => {
+    expect(effectiveness([], ['Water'], chart)).toBe(1)
+  })
 })
 
 describe('roundScore', () => {

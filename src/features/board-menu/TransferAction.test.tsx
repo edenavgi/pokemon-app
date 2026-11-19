@@ -44,6 +44,8 @@ describe('TransferAction', () => {
     expect(setGym).toHaveBeenCalledWith(['p13'], 'g2')
     await waitFor(() => expect(api.notices).toEqual([{ message: 'Moved Abra to Mind Gym.', type: 'success' }]))
     expect(close).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('status')).toHaveTextContent('Moved Abra to Mind Gym.')
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
   it('sends only the Pokémon not already in the chosen gym', async () => {

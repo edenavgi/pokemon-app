@@ -24,6 +24,11 @@ async function setup(itemId: string | undefined, patch?: { level?: number; statu
 const buttonNames = () => screen.getAllByRole('button').map((b) => b.textContent)
 
 describe('StatusDialog transitions', () => {
+  it('a status the game does not know still opens the dialog, with Training and Rest', async () => {
+    await setup('p1', { status: 'Working on it' as Status })
+    expect(await screen.findByRole('button', { name: 'Move to Training' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Rest/ })).toBeInTheDocument()
+  })
   it.each([
     ['Recruited', 1, ['Training']],
     ['Training', 4, ['Resting']],
@@ -47,6 +52,8 @@ describe('StatusDialog transitions', () => {
     await userEvent.click(screen.getByRole('button', { name: t.rest }))
     expect(update).toHaveBeenLastCalledWith([{ id: 'p1', patch: { energy: 3, status: 'Training' } }])
     expect(close).toHaveBeenCalledTimes(1)
+    expect(await screen.findByRole('status')).toHaveTextContent(/rest/i)
+    expect(screen.queryByRole('button', { name: t.rest })).not.toBeInTheDocument()
   })
 
   it('Resting at level 5+: Rest sets Ready', async () => {

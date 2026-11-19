@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useApi } from '../../api/ApiProvider'
-import { POKE_TYPES, type PokeType } from '../../api/GameApi'
+import { POKE_TYPES, type Gym, type PokeType, type Pokemon } from '../../api/GameApi'
 import { ErrorState, Empty, Loading } from '../../components/States'
 import { TypeBadge } from '../../components/TypeBadge'
 import { Button } from '../../components/ui/button'
@@ -22,6 +22,8 @@ export function RecruitTab({ gyms, reload }: TabProps) {
   const [gymId, setGymId] = useState<string>()
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string>()
+  // Recruits made here that the gyms list doesn't show yet (the reload may still be on its way)
+  const [added, setAdded] = useState<Pokemon[]>([])
 
   if (species.error && !species.data) return <ErrorState error={species.error} onRetry={species.reload} />
   if (!species.data) return <Loading />
@@ -31,7 +33,13 @@ export function RecruitTab({ gyms, reload }: TabProps) {
     (s) => s.name.toLowerCase().includes(needle) && (typeFilter === 'All' || s.types.includes(typeFilter)),
   )
   const chosen = species.data.find((s) => s.dexNumber === dex)
-  const gym = gyms.find((g) => g.id === gymId)
+  const listed = gyms.find((g) => g.id === gymId)
+  // Count our own recent recruits until the gyms list includes them, so the 6-Pokémon limit holds
+  const unseen = added.filter((p) => !gyms.some((g) => g.roster.some((r) => r.id === p.id)))
+  const gym: Gym | undefined = listed && {
+    ...listed,
+    roster: [...listed.roster, ...unseen.filter((p) => p.gym?.id === listed.id)],
+  }
 
   const recruit = async () => {
     if (!chosen || !gym || busy) return
@@ -44,7 +52,8 @@ export function RecruitTab({ gyms, reload }: TabProps) {
     setBusy(true)
     try {
       const detail = await api.getSpecies(chosen.dexNumber)
-      await api.recruit({ species: detail, gymId: gym.id })
+      const recruited = await api.recruit({ species: detail, gymId: gym.id })
+      setAdded((list) => [...list, recruited])
       api.notify(t.recruitSuccess(chosen.name, gym.name), 'success')
       setDex(undefined)
       reload()

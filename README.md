@@ -86,4 +86,3 @@ After those checks pass on `main`, `.github/workflows/deploy.yml` pushes `dist/`
 
 - Trim the OAuth scopes to the minimum before anyone installs the app.
 - `listPokemon` filters gym/status client-side; server-side `query_params` would need the Status column ID.
-- `getGym` is not implemented (no screen uses it yet).
