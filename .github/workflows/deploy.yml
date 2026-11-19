@@ -1,0 +1,61 @@
+# Uploads the built app to monday code (client-side CDN) after the checks pass.
+# Runs on every push to main, and by hand from Actions → Deploy → Run workflow.
+#
+# Needs, in the repo's Settings → Secrets and variables → Actions:
+#   secret   MONDAY_TOKEN           a monday API token (avatar → Developers → API token)
+#   variable MONDAY_APP_ID          the app id (from the Developer Center URL)
+#   variable MONDAY_APP_VERSION_ID  the DRAFT version to push to (a live version would need --force)
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never run two deploys at once; a queued one waits instead of cancelling the running one
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
+      APP_ID: ${{ vars.MONDAY_APP_ID }}
+      APP_VERSION_ID: ${{ vars.MONDAY_APP_VERSION_ID }}
+    steps:
+      - name: Check the settings
+        run: |
+          [ -n "$MONDAY_TOKEN" ] || { echo "::error::Secret MONDAY_TOKEN is missing"; exit 1; }
+          [ -n "$APP_ID" ] || { echo "::error::Variable MONDAY_APP_ID is missing"; exit 1; }
+          [ -n "$APP_VERSION_ID" ] || { echo "::error::Variable MONDAY_APP_VERSION_ID is missing"; exit 1; }
+
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 26
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Install the monday apps CLI
+        run: npm install -g @mondaycom/apps-cli@4.11.1
+
+      # The token comes from an env var, so it never appears in the command line or the log
+      - name: Log in to monday
+        run: mapps init --token "$MONDAY_TOKEN"
+
+      - name: Push dist/ to monday code
+        run: mapps code:push --client-side --directoryPath dist --appId "$APP_ID" --appVersionId "$APP_VERSION_ID"

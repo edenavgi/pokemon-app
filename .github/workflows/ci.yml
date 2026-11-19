@@ -1,14 +1,15 @@
-# Runs the checks from docs/GIT_WORKFLOW.md on every PR and on every push to main.
+# Runs the checks from docs/GIT_WORKFLOW.md on every PR, on every push to main, and before every deploy.
 name: CI
 
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_call: # deploy.yml runs these checks before it deploys
 
 # A newer push to the same branch cancels the run that is still going
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }} # "Deploy" when called from deploy.yml, so the two never cancel each other
   cancel-in-progress: true
 
 permissions:
