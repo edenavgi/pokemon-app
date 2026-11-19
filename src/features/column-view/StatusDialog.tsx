@@ -26,7 +26,17 @@ function Dialog({ itemId }: { itemId: string }) {
   // Dex of the form we just evolved away from: stays disabled until the reload shows a different form.
   const [staleDex, setStaleDex] = useState<number>()
   const [writeError, setWriteError] = useState<Error>()
+  const [done, setDone] = useState<string>()
 
+  // Written and asked monday to close; if the window stays open, say what happened instead of "Saving…"
+  if (done) {
+    return (
+      <div className="flex flex-col gap-3 p-4">
+        <h2 className="font-medium">{t.title}</h2>
+        <p role="status" className="text-sm">{done}</p>
+      </div>
+    )
+  }
   if (error && !pokemon) return <ErrorState error={error} onRetry={reload} />
   if (!pokemon) return <Loading />
   if (error && staleDex === pokemon.dexNumber) return <ErrorState error={error} onRetry={reload} />
@@ -50,6 +60,7 @@ function Dialog({ itemId }: { itemId: string }) {
       return
     }
     api.notify(success, 'success')
+    setDone(success)
     api.closeFeature()
   }
 

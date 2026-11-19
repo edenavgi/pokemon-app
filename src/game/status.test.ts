@@ -68,6 +68,12 @@ describe('applyRest', () => {
 })
 
 describe('allowedTransitions', () => {
+  it('a label the game does not know (or an empty cell) can still be moved back into the game', () => {
+    // someone typed "Working on it" in monday, or cleared the cell
+    for (const status of ['Working on it', '', null]) {
+      expect(allowedTransitions(makePokemon({ status: status as unknown as 'Recruited' }))).toEqual({ to: ['Training'], canRest: true })
+    }
+  })
   it('Recruited -> Training', () => {
     expect(allowedTransitions(makePokemon({ status: 'Recruited' }))).toEqual({ to: ['Training'], canRest: false })
   })

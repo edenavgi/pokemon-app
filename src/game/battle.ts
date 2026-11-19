@@ -25,7 +25,7 @@ export type BattleResult =
     }
 
 export function effectiveness(attacker: PokeType[], defender: PokeType[], chart: TypeChart): Effectiveness {
-  if (defender.length === 0) return 1
+  if (defender.length === 0 || attacker.length === 0) return 1 // unknown types: neutral, not immune
   const target = defender[0]
   return attacker.reduce<Effectiveness>((best, t) => {
     const e = chart[t][target] ?? 1

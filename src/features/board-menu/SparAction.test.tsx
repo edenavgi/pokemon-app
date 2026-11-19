@@ -38,6 +38,29 @@ describe('SparAction', () => {
     expect(patches[1].patch).toMatchObject({ level: 19, energy: 1 })
     await waitFor(() => expect(api.notices).toEqual([{ message: 'Charmander and Charmeleon sparred: +1 level, -1 energy each.', type: 'success' }]))
     expect(close).toHaveBeenCalledTimes(1)
+    // if monday doesn't close the window, it says what happened instead of staying on "Saving…"
+    expect(screen.getByRole('status')).toHaveTextContent('Charmander and Charmeleon sparred')
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('confirm uses fresh data, so a change made while the window was open is not overwritten', async () => {
+    const { api, update } = await setup(['p1', 'p2'])
+    await screen.findByRole('listitem', { name: 'Charmander' }) // energy 3 when the window opened
+    await api.updatePokemon([{ id: 'p1', patch: { energy: 1 } }]) // e.g. sparred elsewhere meanwhile
+    update.mockClear()
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
+    expect(update.mock.calls[0][0][0].patch).toMatchObject({ level: 6, energy: 0, status: 'Resting' })
+  })
+
+  it('confirm re-checks the rules on fresh data and writes nothing if they now fail', async () => {
+    const { api, update } = await setup(['p1', 'p2'])
+    await screen.findByRole('listitem', { name: 'Charmander' })
+    await api.updatePokemon([{ id: 'p1', patch: { status: 'Resting' } }]) // rested by hand meanwhile
+    update.mockClear()
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(sparErrorText('RESTING', ['Charmander']))
+    expect(update).not.toHaveBeenCalled()
   })
 
   it.each([

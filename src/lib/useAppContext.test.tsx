@@ -26,6 +26,28 @@ describe('useAppContext', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(true) // no longer listening
   })
 
+  it('falls back to a light context when getContext fails, instead of loading forever', async () => {
+    const api = new MockGameApi()
+    api.getContext = () => Promise.reject(new Error('no context'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const wrapper = ({ children }: { children: ReactNode }) => <ApiProvider api={api}>{children}</ApiProvider>
+    const { result } = renderHook(() => useAppContext(), { wrapper })
+    await waitFor(() => expect(result.current).toEqual({ theme: 'light' }))
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('keeps a live change that arrives before the first getContext resolves', async () => {
+    const api = new MockGameApi()
+    let resolveFirst: (c: { theme: 'light' }) => void = () => {}
+    api.getContext = () => new Promise((r) => { resolveFirst = r })
+    const wrapper = ({ children }: { children: ReactNode }) => <ApiProvider api={api}>{children}</ApiProvider>
+    const { result } = renderHook(() => useAppContext(), { wrapper })
+    act(() => api.setContext({ theme: 'dark' }))
+    await act(async () => resolveFirst({ theme: 'light' })) // older snapshot, arrives late
+    expect(result.current?.theme).toBe('dark')
+  })
+
   it('still returns the context when onContextChange is not implemented (throws)', async () => {
     const api = new MockGameApi({ context: { itemId: 'p1' } })
     api.onContextChange = () => { throw new Error('onContextChange: not implemented yet') }

@@ -98,6 +98,24 @@ describe('RecruitTab', () => {
     expect(screen.getByRole('button', { name: 'Recruit' })).toBeDisabled() // selection cleared
   })
 
+  it('counts its own recruits while the gyms list is stale, so a 7th is rejected', async () => {
+    const { api, recruit } = setup()
+    const first = await api.listGyms()
+    vi.spyOn(api, 'listGyms').mockResolvedValue(first) // the reload keeps returning the old roster
+    await screen.findByRole('list', { name: 'Pokémon' })
+    await pickGym('Cerulean Gym') // 2 Pokémon
+    for (let i = 0; i < 4; i++) {
+      await pick('Squirtle')
+      await userEvent.click(screen.getByRole('button', { name: 'Recruit' }))
+      await waitFor(() => expect(recruit).toHaveBeenCalledTimes(i + 1))
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Recruit' })).toBeDisabled())
+    }
+    await pick('Squirtle')
+    await userEvent.click(screen.getByRole('button', { name: 'Recruit' }))
+    expect(screen.getByRole('alert')).toHaveTextContent(joinErrorText('ROSTER_FULL'))
+    expect(recruit).toHaveBeenCalledTimes(4)
+  })
+
   it('a failed recruit shows an error and no success notice', async () => {
     const { api, recruit } = setup()
     recruit.mockRejectedValueOnce(new Error('boom'))

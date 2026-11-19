@@ -5,6 +5,7 @@ import type {
 } from "../GameApi";
 import { POKE_TYPES } from "../GameApi";
 import { MAX_ENERGY, START_LEVEL } from "../../game/constants";
+import { cleanFlavorText } from "./flavorText";
 import { SeamlessApiClient } from "@mondaydotcomorg/api";
 
 const monday = mondaySdk();
@@ -54,24 +55,33 @@ const TALK_MUTATION = `
 `;
 
 
+// The fields of one gym item, shared by the board query and the single-gym query (→ toGym)
+const GYM_FIELDS = `
+  id
+  name
+  column_values {
+    text
+    column { title }
+    ... on DropdownValue { values { label } }
+    ... on BoardRelationValue { linked_item_ids }
+    ... on MirrorValue { display_value }
+  }
+`;
+
 const GYMS_QUERY = `
   query ($boardIds: [ID!]) {
     boards(ids: $boardIds) {
       items_page(limit: 500) {
         cursor
-        items {
-          id
-          name
-          column_values {
-            text
-            column { title }
-            ... on DropdownValue { values { label } }
-            ... on BoardRelationValue { linked_item_ids }
-            ... on MirrorValue { display_value }
-          }
-        }
+        items { ${GYM_FIELDS} }
       }
     }
+  }
+`;
+
+const GYM_QUERY = `
+  query ($gymId: ID!) {
+    items(ids: [$gymId]) { ${GYM_FIELDS} }
   }
 `;
 
@@ -372,7 +382,7 @@ async function loadSpecies(dexNumber: number): Promise<SpeciesDetail> {
     attack: stat("attack"),
     defense: stat("defense"),
     speed: stat("speed"),
-    flavorText: englishFlavor ? englishFlavor.flavor_text.replace(/\s+/g, " ").trim() : "",
+    flavorText: englishFlavor ? cleanFlavorText(englishFlavor.flavor_text) : "",
   };
 }
 
@@ -536,10 +546,6 @@ function toGen1(types: PokeApiType[]): SpeciesSummary[] {
 const loadTypeChart = once(() => storageCached(TYPE_CHART_KEY, async () => toTypeChart(await loadTypes())));
 const loadGen1 = once(() => storageCached(GEN1_KEY, async () => toGen1(await loadTypes())));
 
-// Placeholder for methods we haven't implemented yet
-function notYet(name: string): never {
-  throw new Error(`${name}: not implemented yet`);
-}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toAppContext(data: any): AppContext {
@@ -614,7 +620,14 @@ export function createMondayGameApi(): GameApi {
 
       return gymItems.map((g) => toGym(g, pokemonById));
     },
-    getGym: () => notYet("getGym"),
+    // One gym and its roster: the gym item, then ONE query for its Pokémon (same shape as listGyms)
+    getGym: async (gymId) => {
+      const res = await client.request<{ data: { data: { items: GymItem[] } } }>(GYM_QUERY, { gymId });
+      const gym = res.data.data.items[0];
+      if (!gym) throw new Error(`Gym item ${gymId} not found`);
+      const pokemonById = new Map((await fetchPokemon(rosterIds(gym))).map((p) => [p.id, p]));
+      return toGym(gym, pokemonById);
+    },
     // A new item on the Gyms board from the saved config. Type is a dropdown: written by label.
     createGym: async ({ name, type }) => {
       const cfg = await api.getBoardConfig();

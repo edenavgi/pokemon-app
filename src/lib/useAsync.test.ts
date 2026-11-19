@@ -25,6 +25,27 @@ describe('useAsync', () => {
     expect(result.current.data).toBeUndefined()
   })
 
+  it('keeps the last data when a reload fails (screens show data unless there is none)', async () => {
+    let fail = false
+    const fn = () => (fail ? Promise.reject(new Error('blip')) : Promise.resolve(7))
+    const { result } = renderHook(() => useAsync(fn, []))
+    await waitFor(() => expect(result.current.data).toBe(7))
+    fail = true
+    act(() => result.current.reload())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.error?.message).toBe('blip')
+    expect(result.current.data).toBe(7)
+  })
+
+  it('drops the old data when the deps change and the new load fails', async () => {
+    const fn = (id: number) => (id === 2 ? Promise.reject(new Error('missing')) : Promise.resolve(`item ${id}`))
+    const { result, rerender } = renderHook(({ id }) => useAsync(() => fn(id), [id]), { initialProps: { id: 1 } })
+    await waitFor(() => expect(result.current.data).toBe('item 1'))
+    rerender({ id: 2 })
+    await waitFor(() => expect(result.current.error?.message).toBe('missing'))
+    expect(result.current.data).toBeUndefined()
+  })
+
   it('reload calls fn again', async () => {
     const fn = vi.fn(() => Promise.resolve(1))
     const { result } = renderHook(() => useAsync(fn, []))

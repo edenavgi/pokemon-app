@@ -100,7 +100,7 @@ mutation ($prompt: String!, $config: RunPromptConfigInput) {
 - Two calls per species, in parallel: `pokemon/{n}` (types, stats, sprite) and `pokemon-species/{n}` (display name, flavor text).
 - `pokemon.name` is a technical slug (`mr-mime`, `nidoran-f`) → the display name comes from `species.names[]` where `language.name === "en"` (`Mr. Mime`).
 - Types are lowercase (`fire`) → capitalised to match `PokeType`. Stats are an array searched by `stat.name`.
-- English flavor text contains `\n` and `\f` → collapsed with `.replace(/\s+/g, " ")`.
+- English flavor text contains `\n` and `\f` → collapsed with `.replace(/\s+/g, " ")`. It also splits words across lines with a **soft hyphen** (U+00AD): #65 Alakazam is `"out\u00ad\nperform a super\u00ad\ncomputer"`. `cleanFlavorText` removes the soft hyphen and the line break after it first, so it reads "outperform a supercomputer" (seen 2026-11-19).
 - Cached in memory per page load as a `Promise` per dex number (concurrent calls share one request; failures are not cached).
 
 ## 7. SDK storage and the widget context (Task 16, 2026-11-18)

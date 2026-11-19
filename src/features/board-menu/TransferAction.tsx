@@ -30,7 +30,17 @@ function Transfer({ cfg, boardId, ids }: { cfg: BoardConfig; boardId?: string; i
   useNotifyError(problem)
   const [busy, setBusy] = useState(false)
   const [saveError, setSaveError] = useState<Error>()
+  const [done, setDone] = useState<string>()
 
+  // Written and asked monday to close; if the window stays open, say what happened instead of "Saving…"
+  if (done) {
+    return (
+      <div className="flex flex-col gap-3 p-4">
+        <h2 className="font-medium">{t.title}</h2>
+        <p role="status" className="text-sm">{done}</p>
+      </div>
+    )
+  }
   if (problem) {
     return (
       <div className="flex flex-col gap-3 p-4">
@@ -67,7 +77,9 @@ function Transfer({ cfg, boardId, ids }: { cfg: BoardConfig; boardId?: string; i
       setBusy(false)
       return
     }
-    api.notify(t.success(moving.map((p) => p.name), gym.name), 'success')
+    const message = t.success(moving.map((p) => p.name), gym.name)
+    api.notify(message, 'success')
+    setDone(message)
     api.closeFeature()
   }
 
