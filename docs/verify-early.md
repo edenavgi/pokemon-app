@@ -155,3 +155,16 @@ The app's **Object** feature ("Gym HQ", key `moveogroup_pokemon-gym-manager::gym
   - The sprite is `…/sprites/pokemon/{n}.png`, the same URL as `front_default`.
 - **Cache:** memory (one Promise per page load), then global SDK storage (`pokeapi:typeChart:v1`, `pokeapi:gen1:v1`), then PokéAPI.
   - Checked in monday: the first visit to Recruit makes 18 `type/…` requests; after a reload, none.
+
+## 12. Deploying to monday code (Task 23, 2026-11-19)
+- **`mapps code:push --client-side --directoryPath dist`** (run by `.github/workflows/deploy.yml`) uploads to the draft version's CDN.
+  - The URL looks like `https://v<hash>.cdn2.monday.app`, and the log prints it.
+  - `mapps code:status` says "No deployment found": it only covers server deployments, not the client-side CDN.
+- **Vite `base: './'`** makes the asset paths relative (`./assets/…`), so `index.html` works at the CDN root.
+- **Pointing a feature at the CDN:** `mapps app-features:build --buildType monday_code_cdn --customUrl "#/board-view"`.
+  - The manifest then stores `build: { url: "#/board-view", kind: "view" }`.
+  - The Developer Center shows the full URL: `<cdn URL>/#/board-view`.
+  - monday still appends its query after the hash, as with the tunnel (§1).
+- **Cache:** after the switch, a view that had been opened while the tunnel was down kept showing the ngrok error page until the browser was quit and reopened. The setting itself was already correct.
+- **Checked by Eden with the tunnel and `npm run dev` stopped:** item view + Talk, board view, widget, Spar/Transfer, the Status dialog and Gym HQ View all work.
+- Status & Evolve has no URL of its own: it opens the Dialog feature.

@@ -15,7 +15,7 @@ Built with React + TypeScript + Vite, shadcn/ui + Tailwind, `monday-sdk-js`, `@m
 | 6.4 | Board multi-item menu: Spar / Transfer | `#/spar`, `#/transfer` | ✅ works in monday |
 | 6.5 | Status column dialog: transitions, Rest, Evolve | `#/column-view` | ✅ works in monday |
 | 6.6 | Gym HQ: create gym, recruit, battle | `#/gym-hq` | ✅ works in monday as a board view ("Gym HQ View"), by decision instead of a custom object |
-| — | Deploy to monday code | — | ❌ not done (plan Task 23); runs from a dev tunnel |
+| — | Deploy to monday code | — | ✅ every feature loads from monday code (client-side CDN), deployed by GitHub Actions on each merge to `main` |
 
 ## How it is built
 
@@ -44,7 +44,9 @@ npm run dev            # http://localhost:5173
 - `http://localhost:5173/#/column-view?mock=1&itemId=p1`
 - `http://localhost:5173/#/gym-hq?mock=1`
 
-**Inside monday (development):**
+**Inside monday:** every feature points at monday code (`mapps app-features:build --buildType monday_code_cdn --customUrl "#/<route>"`). The CD workflow uploads each merge to `main`, so nothing needs to run locally.
+
+**Inside monday with local changes (tunnel):** to try changes before they reach `main`, run a tunnel and point a feature back at it:
 ```bash
 mapps tunnel:create -p 5173 -a <APP_ID>
 ```
@@ -82,7 +84,6 @@ After those checks pass on `main`, `.github/workflows/deploy.yml` pushes `dist/`
 
 ## Open items
 
-- Deploy to monday code: plan Task 23.
 - Trim the OAuth scopes to the minimum before anyone installs the app.
 - `listPokemon` filters gym/status client-side; server-side `query_params` would need the Status column ID.
 - `getGym` is not implemented (no screen uses it yet).
