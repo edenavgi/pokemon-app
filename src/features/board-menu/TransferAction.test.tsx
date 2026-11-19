@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiProvider } from '../../api/ApiProvider'
@@ -42,7 +42,7 @@ describe('TransferAction', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Mind Gym/ }))
     expect(setGym).toHaveBeenCalledTimes(1)
     expect(setGym).toHaveBeenCalledWith(['p13'], 'g2')
-    expect(api.notices).toEqual([{ message: 'Moved Abra to Mind Gym.', type: 'success' }])
+    await waitFor(() => expect(api.notices).toEqual([{ message: 'Moved Abra to Mind Gym.', type: 'success' }]))
     expect(close).toHaveBeenCalledTimes(1)
   })
 
@@ -58,7 +58,7 @@ describe('TransferAction', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Fire Hall/ }))
     expect(setGym).toHaveBeenCalledTimes(1)
     expect(setGym).toHaveBeenCalledWith(['p2'], 'gf')
-    expect(api.notices).toEqual([{ message: 'Moved Charmeleon to Fire Hall.', type: 'success' }])
+    await waitFor(() => expect(api.notices).toEqual([{ message: 'Moved Charmeleon to Fire Hall.', type: 'success' }]))
   })
 
   it('everything already there: info "Nothing to move", no write', async () => {
@@ -73,7 +73,7 @@ describe('TransferAction', () => {
     })
     await userEvent.click(await screen.findByRole('button', { name: /Fire Hall/ }))
     expect(setGym).not.toHaveBeenCalled()
-    expect(api.notices).toEqual([{ message: 'Nothing to move', type: 'info' }])
+    await waitFor(() => expect(api.notices).toEqual([{ message: 'Nothing to move', type: 'info' }]))
     expect(close).not.toHaveBeenCalled()
   })
 
@@ -102,7 +102,7 @@ describe('TransferAction', () => {
     })
     await userEvent.click(await screen.findByRole('button', { name: /Mind Gym/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent('monday said no')
-    expect(api.notices).toEqual([{ message: 'monday said no', type: 'error' }])
+    await waitFor(() => expect(api.notices).toEqual([{ message: 'monday said no', type: 'error' }]))
     expect(close).not.toHaveBeenCalled()
   })
 
@@ -112,7 +112,7 @@ describe('TransferAction', () => {
       a.getPokemonMany = async (ids) => (await orig(ids)).filter((p) => p.id !== 'p2')
     })
     expect(await screen.findByText(selectionText.notLoaded)).toBeInTheDocument()
-    expect(api.notices).toEqual([{ message: selectionText.notLoaded, type: 'error' }])
+    await waitFor(() => expect(api.notices).toEqual([{ message: selectionText.notLoaded, type: 'error' }]))
     expect(screen.queryByRole('button', { name: /Gym/ })).not.toBeInTheDocument()
     expect(setGym).not.toHaveBeenCalled()
   })
@@ -124,7 +124,7 @@ describe('TransferAction', () => {
     })
     const text = joinErrorText('DUPLICATE', ['Abra'])
     expect(await screen.findByText(text)).toBeInTheDocument()
-    expect(api.notices).toEqual([{ message: text, type: 'error' }])
+    await waitFor(() => expect(api.notices).toEqual([{ message: text, type: 'error' }]))
     expect(api.getPokemonMany).toHaveBeenCalledWith(['p13'])
     expect(setGym).not.toHaveBeenCalled()
   })
@@ -132,7 +132,7 @@ describe('TransferAction', () => {
   it('wrong board: rejects, no gym buttons, no write', async () => {
     const { api, setGym, gyms } = await setup(['p1'], undefined, 'other')
     expect(await screen.findByText(selectionText.wrongBoard)).toBeInTheDocument()
-    expect(api.notices).toEqual([{ message: selectionText.wrongBoard, type: 'error' }])
+    await waitFor(() => expect(api.notices).toEqual([{ message: selectionText.wrongBoard, type: 'error' }]))
     expect(screen.queryByRole('button', { name: /Gym/ })).not.toBeInTheDocument()
     expect(gyms).not.toHaveBeenCalled()
     expect(setGym).not.toHaveBeenCalled()

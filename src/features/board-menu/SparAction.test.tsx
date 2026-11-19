@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiProvider } from '../../api/ApiProvider'
@@ -36,7 +36,7 @@ describe('SparAction', () => {
     expect(patches.map((x) => x.id)).toEqual(['p1', 'p2'])
     expect(patches[0].patch).toMatchObject({ level: 6, energy: 2 })
     expect(patches[1].patch).toMatchObject({ level: 19, energy: 1 })
-    expect(api.notices).toEqual([{ message: 'Charmander and Charmeleon sparred: +1 level, -1 energy each.', type: 'success' }])
+    await waitFor(() => expect(api.notices).toEqual([{ message: 'Charmander and Charmeleon sparred: +1 level, -1 energy each.', type: 'success' }]))
     expect(close).toHaveBeenCalledTimes(1)
   })
 
@@ -51,7 +51,7 @@ describe('SparAction', () => {
     const { api, update, close } = await setup(ids ? [...ids] : undefined)
     const text = sparErrorText(code, names ? [...names] : undefined)
     expect(await screen.findByText(text)).toBeInTheDocument()
-    expect(api.notices).toEqual([{ message: text, type: 'error' }])
+    await waitFor(() => expect(api.notices).toEqual([{ message: text, type: 'error' }]))
     expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument()
     expect(update).not.toHaveBeenCalled()
     expect(close).not.toHaveBeenCalled()
@@ -64,7 +64,7 @@ describe('SparAction', () => {
     })
     const text = sparErrorText('NO_ENERGY', ['Charmander'])
     expect(await screen.findByText(text)).toBeInTheDocument()
-    expect(api.notices).toEqual([{ message: text, type: 'error' }])
+    await waitFor(() => expect(api.notices).toEqual([{ message: text, type: 'error' }]))
     expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument()
     expect(update).not.toHaveBeenCalled()
   })
@@ -75,7 +75,7 @@ describe('SparAction', () => {
     })
     await userEvent.click(await screen.findByRole('button', { name: 'Confirm' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('monday said no')
-    expect(api.notices).toEqual([{ message: 'monday said no', type: 'error' }])
+    await waitFor(() => expect(api.notices).toEqual([{ message: 'monday said no', type: 'error' }]))
     expect(close).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled()
   })
@@ -87,7 +87,7 @@ describe('SparAction', () => {
     })
     const text = selectionText.notLoaded
     expect(await screen.findByText(text)).toBeInTheDocument()
-    expect(api.notices).toEqual([{ message: text, type: 'error' }])
+    await waitFor(() => expect(api.notices).toEqual([{ message: text, type: 'error' }]))
     expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument()
     expect(update).not.toHaveBeenCalled()
   })
@@ -96,7 +96,7 @@ describe('SparAction', () => {
     const { api, update } = await setup(['p1', 'p1'])
     const text = sparErrorText('DUPLICATE')
     expect(await screen.findByText(text)).toBeInTheDocument()
-    expect(api.notices).toEqual([{ message: text, type: 'error' }])
+    await waitFor(() => expect(api.notices).toEqual([{ message: text, type: 'error' }]))
     expect(update).not.toHaveBeenCalled()
   })
 
@@ -104,7 +104,7 @@ describe('SparAction', () => {
     const { api, update } = await setup(['p1', 'p2'], undefined, 'other')
     const get = vi.spyOn(api, 'getPokemonMany')
     expect(await screen.findByText(selectionText.wrongBoard)).toBeInTheDocument()
-    expect(api.notices).toEqual([{ message: selectionText.wrongBoard, type: 'error' }])
+    await waitFor(() => expect(api.notices).toEqual([{ message: selectionText.wrongBoard, type: 'error' }]))
     expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument()
     expect(get).not.toHaveBeenCalled()
     expect(update).not.toHaveBeenCalled()
