@@ -71,6 +71,8 @@ npm run build
 
 GitHub Actions runs the same checks, plus `npm run lint`, on every PR and every push to `main` (`.github/workflows/ci.yml`).
 
+After those checks pass on `main`, `.github/workflows/deploy.yml` pushes `dist/` to monday code (`mapps code:push --client-side`) for the draft version. It needs the secret `MONDAY_TOKEN` and the variables `MONDAY_APP_ID` and `MONDAY_APP_VERSION_ID` in the repo settings.
+
 ## Docs
 
 - `docs/concepts.md`: which monday concept each feature uses, and why.
