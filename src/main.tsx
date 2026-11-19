@@ -9,6 +9,7 @@ import { BoardView } from './features/board-view/BoardView.tsx'
 import { SparAction } from './features/board-menu/SparAction.tsx'
 import { TransferAction } from './features/board-menu/TransferAction.tsx'
 import { StatusDialog } from './features/column-view/StatusDialog.tsx'
+import { GymHQ } from './features/gym-hq/GymHQ.tsx'
 import { ItemView } from './features/item-view/ItemView.tsx'
 import { Widget } from './features/widget/Widget.tsx'
 import { RequireBoardConfig } from './features/setup/RequireBoardConfig.tsx'
@@ -36,6 +37,7 @@ const routes = {
   spar: SparAction,
   transfer: TransferAction,
   'column-view': StatusDialog,
+  'gym-hq': GymHQ,
 }
 
 // monday puts its query string after the hash, so check both places.
