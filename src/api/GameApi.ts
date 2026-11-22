@@ -31,6 +31,8 @@ export interface EvolutionTarget {
   dexNumber: number; name: string; trigger: 'level-up' | 'other'; minLevel: number | null
 }
 export interface EvolutionInfo { stage: 1 | 2 | 3; next: EvolutionTarget[] }
+/** A damaging move from PokéAPI, used by the server's battle engine. `type: null` = typeless (Struggle). */
+export interface Move { name: string; type: PokeType | null; power: number }
 export type Effectiveness = 0 | 0.5 | 1 | 2
 export type TypeChart = Record<PokeType, Partial<Record<PokeType, Effectiveness>>> // missing = 1
 export type PokemonPatch = Partial<Omit<Pokemon, 'id' | 'gym'>>
