@@ -192,3 +192,20 @@ The app's **Object** feature ("Gym HQ", key `moveogroup_pokemon-gym-manager::gym
 - **Logs:** each `Logger.info(JSON)` line shows in `mapps code:logs -i <APP_VERSION_ID> -t console -s live` as `[console]{…}`, and in Developer Center → **Host on monday** → logs. One `/health` request = one line: `{"kind":"http","traceId":"…","method":"GET","path":"/health","status":200,"durationMs":1}`.
   - The push's deploy log printed lines of literally `null` before our boot error. They are not our events, which arrive as normal JSON.
 - **Through the tunnel:** Vite on 5173 forwards only `/api`, `/oauth` and `/telegram` to the server, so `/health` through the tunnel reaches Vite, not the server. Check it at `http://localhost:8080/health`; tunnel checks start with the first `/api` route (Task 3).
+
+## 14. sessionToken and Document DB on monday code (Phase 2, Task 3, 2026-11-22)
+
+**sessionToken**, read from the Gym HQ View iframe URL (`sessionToken=` after the hash) and decoded without printing it:
+- Header `{ alg: "HS256" }`. The payload has only `dat` and `exp` (no `iat`).
+- `dat` keys: `client_id`, `user_id`, `account_id`, `slug`, `app_id`, `app_version_id`, `install_id`, `is_admin`, `is_view_only`, `is_guest`, `user_kind`.
+- **It is signed with the app's Client Secret.** Sent as `Authorization: Bearer <token>` from the iframe to the deployed server's `GET /api/me`, which verifies with `MONDAY_CLIENT_SECRET` (HS256 only), it returned `200 { connected: false, boardsKnown: false, telegram: { linked: false } }`. The Phase 2 spec says "signing secret", but the Signing Secret is not what signs it.
+- CORS worked from the iframe origin. Without a token, `/api/me` → `401`.
+
+**Document DB:**
+- monday code injects `MNDY_MONGODB_CONNECTION_STRING` by itself. Nothing had to be enabled in the Developer Center.
+- The **first** deployment that connected failed. The push log showed only `null` lines: the SDK Logger's output is not rendered there, which is why boot failures now also go to stderr as `[boot] …`. The next push, with no config change, succeeded. Most likely the database was being created on the first connection (unconfirmed).
+- **It is Firestore with MongoDB compatibility.** `getIndexes()` returns `firestoreOptions: { multikey: true }`.
+  - `db.getCollectionNames()` returns `[]` while no documents exist, even though the indexes were created.
+  - There is no `_id_` index in the list.
+- **Unique indexes are supported.** `links` has `{ name: "userId_1", key: { userId: 1 }, unique: true }`, created by `ensureIndexes` at boot. So `links` keeps `_id = chatId` with a unique `userId`.
+- Inspect it with `mapps database:connection-string -a <APP_ID>` (temporary and read-only), then `mongosh "<string>"` or Compass. Never commit or share the string.
