@@ -113,7 +113,7 @@ export const statusDialogText = {
 
 export const gymHqText = {
   title: 'Gym HQ',
-  tabs: { gyms: 'Gyms', recruit: 'Recruit', arena: 'Arena' },
+  tabs: { gyms: 'Gyms', recruit: 'Recruit', arena: 'Arena', connect: 'Connect' },
   noGyms: 'No gyms yet',
   noGymsHint: 'Create your first gym on the Gyms tab.',
   gym: 'Gym',
@@ -142,4 +142,22 @@ export const gymHqText = {
   headline: (winner: string | null, wins: [number, number]) =>
     winner === null ? `It's a draw, ${wins[0]}–${wins[1]}.` : `${winner} wins the battle!`,
   postFailed: 'The battle was played, but the update could not be posted on the gym items.',
+} as const
+
+export const connectText = {
+  mondayTitle: 'monday',
+  mondayHint: 'Lets the server act for you when you are not in monday: the Telegram bot and the hourly Energy refill.',
+  notConnected: 'Not connected yet.',
+  connectMonday: 'Connect to monday',
+  waiting: 'Waiting for you to approve in the new tab…',
+  timedOut: 'Still not connected. Approve in the monday tab, or try again.',
+  connected: 'Connected to monday.',
+  syncingBoards: 'Telling the server which boards you play on…',
+  boardsSynced: 'The server knows your Gyms and Pokémon boards.',
+  telegramTitle: 'Telegram',
+  telegramHint: 'Play from Telegram: link a chat to your monday user.',
+  telegramNeedsMonday: 'Connect monday first.',
+  telegramLinked: 'A Telegram chat is linked.',
+  connectTelegram: 'Connect Telegram',
+  telegramSoon: 'Telegram linking is the next step of the project.',
 } as const

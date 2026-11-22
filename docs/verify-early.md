@@ -223,3 +223,14 @@ Tested on the deployed server, started from the Gym HQ View iframe console (`POS
 - **The response** has `access_token` and `refresh_token`, and no `expires_in`. The access token is a JWT with `exp`, which `tokenFromResponse` reads. Refresh tokens rotate and are single-use.
 - **Document DB (Firestore)** handles `findOneAndDelete` with an `expiresAt > now` filter. The single-use OAuth `state` works.
 - The callback's `me()` check with the new token matched the user who started, and the token was stored in Secure Storage as `monday-token:<userId>`.
+
+## 16. The Connect tab and openLinkInTab (Phase 2, Task 5, 2026-11-22)
+
+- **`monday.execute('openLinkInTab', { url })` opens the tab but never resolves** (seen from the Gym HQ View iframe). Awaiting it left the Connect tab stuck: the button stayed disabled, the text stayed "Not connected yet", and polling never started. The OAuth itself succeeded in the other tab.
+  - So the app fires it without awaiting, and only logs a failure.
+  - `src/api/monday/index.test.ts` fakes an `openLinkInTab` that never answers.
+- **Polling vs. a tab in the background:** browsers slow down timers in tabs and frames that are not in front. So the Connect tab also asks the server right away on `focus` / `visibilitychange`, even after its 2-minute polling window has ended.
+- **End to end through the tunnel**, with the app from the worktree on Vite :5173 and the server from the main checkout on :8080. `/api` and `/oauth` reach the server through the Vite proxy, and `SERVER_BASE_URL` = the tunnel URL.
+  - The user was created at 14:56:31.163 by the OAuth callback.
+  - The boards were sent by the tab at 14:56:31.462, 0.3 s later, with no refresh.
+  - The token was in the local Secure Storage file under `monday-token:<userId>`.

@@ -31,3 +31,10 @@ describe('GymHQ', () => {
     expect(document.documentElement).toHaveClass('dark')
   })
 })
+
+describe('GymHQ — Connect tab', () => {
+  it('has a Connect tab next to the game tabs', async () => {
+    await setup('light')
+    expect(await screen.findByRole('tab', { name: 'Connect' })).toBeInTheDocument()
+  })
+})
