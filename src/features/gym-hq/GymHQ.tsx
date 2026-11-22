@@ -7,6 +7,7 @@ import { useAppContext } from '../../lib/useAppContext'
 import { useAsync } from '../../lib/useAsync'
 import { RequireBoardConfig } from '../setup/RequireBoardConfig'
 import { ArenaTab } from './ArenaTab'
+import { ConnectTab } from './ConnectTab'
 import { GymsTab } from './GymsTab'
 import { RecruitTab } from './RecruitTab'
 
@@ -30,10 +31,12 @@ function Hq({ cfg }: { cfg: BoardConfig }) {
         <TabsTrigger value="gyms">{t.tabs.gyms}</TabsTrigger>
         <TabsTrigger value="recruit">{t.tabs.recruit}</TabsTrigger>
         <TabsTrigger value="arena">{t.tabs.arena}</TabsTrigger>
+        <TabsTrigger value="connect">{t.tabs.connect}</TabsTrigger>
       </TabsList>
       <TabsContent value="gyms"><GymsTab gyms={gyms} reload={reload} /></TabsContent>
       <TabsContent value="recruit"><RecruitTab gyms={gyms} reload={reload} /></TabsContent>
       <TabsContent value="arena"><ArenaTab gyms={gyms} /></TabsContent>
+      <TabsContent value="connect"><ConnectTab cfg={cfg} /></TabsContent>
     </Tabs>
   )
 }

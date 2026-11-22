@@ -1,5 +1,5 @@
 import type {
-  AppContext, BoardConfig, EvolutionInfo, GameApi, Gym, Id, NoticeType, Pokemon, PokemonPatch,
+  AppContext, BoardConfig, ServerStatus, EvolutionInfo, GameApi, Gym, Id, NoticeType, Pokemon, PokemonPatch,
   PokeType, SpeciesDetail, SpeciesSummary, Status, TypeChart, Unsubscribe,
 } from '../GameApi'
 import { EVOLUTIONS, SEED_GYMS, SEED_POKEMON, SPECIES, TYPE_CHART } from './fixtures'
@@ -16,6 +16,10 @@ export interface MockOptions { context?: Partial<AppContext>; delayMs?: number; 
 export class MockGameApi implements GameApi {
   notices: { message: string; type: NoticeType }[] = []
   updates: { itemId: Id; body: string }[] = []
+  /** The fake server's view of the user; tests change it to simulate OAuth finishing. */
+  serverStatus: ServerStatus = { connected: false, boardsKnown: false, telegramLinked: false }
+  oauthStarts = 0
+  syncedBoards: BoardConfig[] = []
 
   private pokemon = new Map<Id, PokemonRow>()
   private gyms = new Map<Id, GymRow>()
@@ -85,6 +89,14 @@ export class MockGameApi implements GameApi {
   async listBoards() {
     await this.wait()
     return [{ id: 'b1', name: 'Gyms' }, { id: 'b2', name: 'Pokémon' }]
+  }
+  async getServerStatus() { await this.wait(); return { ...this.serverStatus } }
+  async startMondayOAuth() { await this.wait(); this.oauthStarts++ }
+  async syncBoardConfig(cfg: BoardConfig) {
+    await this.wait()
+    if (!this.serverStatus.connected) throw new Error('Connect monday first')
+    this.syncedBoards.push({ ...cfg })
+    this.serverStatus.boardsKnown = true
   }
   async getBoardConfig() { await this.wait(); return this.boardConfig }
   async setBoardConfig(cfg: BoardConfig) { await this.wait(); this.boardConfig = cfg }

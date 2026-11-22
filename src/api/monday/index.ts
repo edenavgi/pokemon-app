@@ -7,9 +7,10 @@
 // (Phase 2) runs exactly the same code with a user's token instead.
 import mondaySdk from 'monday-sdk-js'
 import { SeamlessApiClient } from '@mondaydotcomorg/api'
-import type { AppContext, BoardConfig, GameApi, ThemeName } from '../GameApi'
+import type { AppContext, BoardConfig, GameApi, ServerStatus, ThemeName } from '../GameApi'
 import { createBoardGateway, type GqlRequest } from '../boards/gateway'
 import { CACHE_KEYS, createPokeApi, fetchPokeApi, memoryPokeCache, type PokeCache } from '../pokeapi/loaders'
+import { createServerClient } from '../server/serverClient'
 
 const monday = mondaySdk()
 
@@ -22,6 +23,14 @@ const seamlessRequest: GqlRequest = async <T,>(query: string, variables?: Record
 }
 
 const boards = createBoardGateway(seamlessRequest)
+
+// Our server (Phase 2). VITE_SERVER_URL is set at build time (GitHub variable SERVER_URL);
+// empty in local dev, where Vite proxies /api to the local server.
+// Every call carries a fresh sessionToken: monday signs it, the server verifies it.
+const server = createServerClient(import.meta.env.VITE_SERVER_URL ?? '', async () => {
+  const res = await monday.get('sessionToken')
+  return String(res.data)
+})
 
 // Global SDK storage key (shared by every widget/view of the app in this account)
 const BOARD_CONFIG_KEY = 'boardConfig'
@@ -100,6 +109,9 @@ export function createMondayGameApi(): GameApi {
       if ((res.data as { success?: boolean } | undefined)?.success === false) {
         throw new Error('Could not save the board settings')
       }
+      // Best effort: the server learns the boards too (works only after Connect; the Connect
+      // tab syncs them again then). A failure here must not undo the saved setup.
+      api.syncBoardConfig(cfg).catch((e: unknown) => console.warn('[syncBoardConfig] the server did not take the boards', e))
     },
 
     getPokemon: async (itemId) => {
@@ -137,6 +149,22 @@ export function createMondayGameApi(): GameApi {
     getSpecies: (dexNumber) => pokeApi.getSpecies(dexNumber),
     getEvolution: (dexNumber) => pokeApi.getEvolution(dexNumber),
     getTypeChart: () => pokeApi.getTypeChart(),
+
+    getServerStatus: async (): Promise<ServerStatus> => {
+      const me = await server.get<{ connected: boolean; boardsKnown: boolean; telegram: { linked: boolean } }>('/api/me')
+      return { connected: me.connected, boardsKnown: me.boardsKnown, telegramLinked: me.telegram.linked }
+    },
+    // The server makes the state + PKCE pair and builds monday's consent URL; the app only opens it.
+    // The OAuth token itself never comes back to the app.
+    startMondayOAuth: async () => {
+      const { authorizeUrl } = await server.post<{ authorizeUrl: string }>('/api/oauth/start')
+      // Not awaited: monday opens the tab but never answers this request (seen 2026-11-22,
+      // verify-early §16). Waiting for it left the Connect tab stuck before polling began.
+      monday
+        .execute('openLinkInTab', { url: authorizeUrl })
+        .catch((e: unknown) => console.warn('[startMondayOAuth] could not open the consent tab', e))
+    },
+    syncBoardConfig: (cfg) => server.put('/api/me/boards', cfg),
 
     talk: async (prompt) => {
       try {

@@ -39,6 +39,13 @@ export type PokemonPatch = Partial<Omit<Pokemon, 'id' | 'gym'>>
 export type Unsubscribe = () => void
 export type NoticeType = 'success' | 'error' | 'info'
 
+/** What the server (Phase 2) knows about the current user. */
+export interface ServerStatus {
+  connected: boolean // went through OAuth: the server has its own token for this user
+  boardsKnown: boolean // the server knows the user's Gyms and Pokémon boards
+  telegramLinked: boolean
+}
+
 export interface GameApi {
   listBoards(): Promise<{ id: Id; name: string }[]>
   getBoardConfig(): Promise<BoardConfig | null>
@@ -63,4 +70,8 @@ export interface GameApi {
   getEvolution(dexNumber: number): Promise<EvolutionInfo>
   getTypeChart(): Promise<TypeChart>
   talk(prompt: { system: string; user: string }): Promise<string>
+  // the server (Phase 2)
+  getServerStatus(): Promise<ServerStatus>
+  startMondayOAuth(): Promise<void> // opens monday's consent screen in a new tab
+  syncBoardConfig(cfg: BoardConfig): Promise<void> // tells the server which boards the game uses
 }
