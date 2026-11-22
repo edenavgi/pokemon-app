@@ -1,6 +1,7 @@
 import request from 'supertest'
 import { afterEach, describe, expect, it } from 'vitest'
-import { fakeLogger, signSessionToken, testConfig, testDb } from '../test/fakes'
+import { fakeLogger, fakeSecureStorage, signSessionToken, testConfig, testDb } from '../test/fakes'
+import { TokenStore } from './auth/tokenStore'
 import { createApp } from './app'
 import type { Database } from './db/mongo'
 import { createRepos } from './db/repos'
@@ -16,7 +17,12 @@ async function setup() {
   open.push(database)
   const now = () => new Date('2026-11-22T10:00:00Z')
   const repos = createRepos(database.db, now)
-  const app = createApp({ config, logger: log.logger, now, repos })
+  const unused = async () => {
+    throw new Error('not used in this test')
+  }
+  const oauth = { exchangeCode: unused, refresh: unused }
+  const tokens = new TokenStore(fakeSecureStorage(), oauth, now)
+  const app = createApp({ config, logger: log.logger, now, repos, tokens, oauth, mondayWithToken: () => unused })
   return { app, repos, database, ...log }
 }
 afterEach(async () => {

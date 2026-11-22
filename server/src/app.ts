@@ -2,6 +2,7 @@ import cors from 'cors'
 import express, { type Express } from 'express'
 import pkg from '../package.json' with { type: 'json' }
 import { meRoutes } from './api/me'
+import { oauthCallback, oauthStart } from './auth/oauth'
 import { requireSession } from './auth/sessionToken'
 import type { Deps } from './deps'
 import { errorHandler, wideEventMiddleware } from './log/middleware'
@@ -37,6 +38,10 @@ export function createApp(deps: Deps): Express {
   // Everything under /api is called by the app and needs a valid sessionToken
   app.use('/api', requireSession(deps))
   app.use('/api/me', meRoutes(deps))
+  app.post('/api/oauth/start', oauthStart(deps))
+
+  // monday sends the user's browser here after the consent screen (no sessionToken: the state proves who)
+  app.get('/oauth/callback', oauthCallback(deps))
 
   app.use((_req, res) => {
     res.status(404).json({ error: 'NOT_FOUND' })

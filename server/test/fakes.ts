@@ -60,3 +60,22 @@ export async function testDb(): Promise<Database> {
   await ensureIndexes(db.db)
   return db
 }
+
+/** Secure Storage in a Map (the real one: @mondaycom/apps-sdk SecureStorage). */
+export function fakeSecureStorage() {
+  const map = new Map<string, unknown>()
+  return {
+    map,
+    get: async <T>(key: string) => (map.has(key) ? (structuredClone(map.get(key)) as T) : null),
+    set: async (key: string, value: unknown) => {
+      map.set(key, structuredClone(value))
+      return true
+    },
+    delete: async (key: string) => map.delete(key),
+  }
+}
+
+/** An OAuth access token shaped like monday's: a JWT whose payload carries `exp` (seconds). */
+export function fakeAccessToken(expSeconds: number, label = 'access'): string {
+  return jwt.sign({ exp: expSeconds, label }, 'monday-side-secret')
+}
