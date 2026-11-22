@@ -14,6 +14,15 @@ export interface UserDoc {
   updatedAt: Date
 }
 
+/** An OAuth login in progress: single use, 10 minutes. */
+export interface OAuthStateDoc {
+  _id: string // the state sent to monday
+  userId: Id
+  accountId: Id
+  codeVerifier: string // PKCE: stays on the server, only its hash goes to monday
+  expiresAt: Date
+}
+
 /** One Telegram chat ↔ one monday user. */
 export interface LinkDoc {
   _id: string // Telegram chat id
@@ -36,6 +45,7 @@ export type Repos = ReturnType<typeof createRepos>
 export function createRepos(database: Db, now: () => Date) {
   const users = database.collection<UserDoc>('users')
   const links = database.collection<LinkDoc>('links')
+  const oauthStates = database.collection<OAuthStateDoc>('oauth_states')
 
   return {
     users: {
@@ -60,6 +70,19 @@ export function createRepos(database: Db, now: () => Date) {
           { $set: { gymsBoardId: cfg.gymsBoardId, pokemonBoardId: cfg.pokemonBoardId, updatedAt: now() } },
         ))
         return res.matchedCount === 1
+      },
+    },
+
+    oauthStates: {
+      async create(doc: OAuthStateDoc): Promise<void> {
+        // Old, never-used states are cleaned up here (deletes are the cheap part of the quota)
+        await db(oauthStates.deleteMany({ expiresAt: { $lte: now() } }))
+        await db(oauthStates.insertOne(doc))
+      },
+
+      /** The state if it exists and hasn't expired — and deletes it in the same step (single use). */
+      consume(state: string): Promise<OAuthStateDoc | null> {
+        return db(oauthStates.findOneAndDelete({ _id: state, expiresAt: { $gt: now() } }))
       },
     },
 

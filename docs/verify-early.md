@@ -209,3 +209,17 @@ The app's **Object** feature ("Gym HQ", key `moveogroup_pokemon-gym-manager::gym
   - There is no `_id_` index in the list.
 - **Unique indexes are supported.** `links` has `{ name: "userId_1", key: { userId: 1 }, unique: true }`, created by `ensureIndexes` at boot. So `links` keeps `_id = chatId` with a unique `userId`.
 - Inspect it with `mapps database:connection-string -a <APP_ID>` (temporary and read-only), then `mongosh "<string>"` or Compass. Never commit or share the string.
+
+## 15. OAuth 2.1 with PKCE against monday (Phase 2, Task 4, 2026-11-22)
+
+Tested on the deployed server, started from the Gym HQ View iframe console (`POST /api/oauth/start` with the sessionToken), then monday's consent screen, then `GET /oauth/callback`.
+
+- **Authorize URL:** the same as the legacy flow, `https://auth.monday.com/oauth2/authorize`, with `client_id`, `redirect_uri`, `state`, `code_challenge` and `code_challenge_method=S256`. A draft, uninstalled app's consent screen works.
+- **The new flow must be switched on per app version.** In the Developer Center, under OAuth & Permissions, turn on "New OAuth Flow" ("Active for me" while testing; it goes live when the version is promoted).
+  - With the switch off, the code is a legacy code, and the new token endpoint answers `invalid_grant`. That is what we got first.
+- **Token endpoint:** `POST https://auth.monday.com/oauth_ms/oauth/token` with a **JSON** body, as in every example in the migration docs.
+  - The first try sent a form-encoded body. Both the switch and the JSON body were fixed before the successful run, so which one mattered is not isolated.
+  - Body fields: `grant_type`, `client_id`, `client_secret`, `code`, `redirect_uri` (the same as the authorize request) and `code_verifier`.
+- **The response** has `access_token` and `refresh_token`, and no `expires_in`. The access token is a JWT with `exp`, which `tokenFromResponse` reads. Refresh tokens rotate and are single-use.
+- **Document DB (Firestore)** handles `findOneAndDelete` with an `expiresAt > now` filter. The single-use OAuth `state` works.
+- The callback's `me()` check with the new token matched the user who started, and the token was stored in Secure Storage as `monday-token:<userId>`.

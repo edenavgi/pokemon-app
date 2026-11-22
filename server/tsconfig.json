@@ -25,6 +25,8 @@
     "vitest.config.ts",
     "../src/game",
     "../src/api/GameApi.ts",
+    "../src/api/boards",
+    "../src/api/pokeapi",
     "../src/lib/messages.ts"
   ],
   "exclude": ["../src/**/*.test.ts", "../src/game/testUtils.ts"]
