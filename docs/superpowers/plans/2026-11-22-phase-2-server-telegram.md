@@ -1,6 +1,7 @@
 # Pokémon Gym Manager — Phase 2 (monday code server + Telegram bot) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans (**chosen by Eden on 2026-11-22: native, inline, slow**). Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Pace (Eden's requirement, this phase is for learning):** one step at a time in the main session. Before each step, say in Hebrew what it does and why. After it, show the result and wait for Eden's questions or go-ahead. No background subagents implement tasks.
 > **Commit budget (Eden's rule, say it in every dispatch):** one commit per task. Review fixes are `git commit --fixup` and get autosquashed **before push**. They are never pushed as separate commits.
 > **Learning track:** Claude writes the code, including the code that talks to monday. Every task ends with an **Explain** step: before moving on, Eden can say in their own words what each listed concept does and why.
 
