@@ -8,17 +8,19 @@
 **Goal:** Add a Node.js + TypeScript server on monday code and a Telegram bot. Any monday user can connect their account (OAuth 2.1 + PKCE), link a Telegram chat, and run the game (gyms, roster, train, rest, talk, battle) from Telegram. Battles become turn-by-turn server simulations that the app replays, and an hourly cron job regenerates Energy.
 
 **Architecture:**
-- A Hono server lives in `server/` with its own `package.json`. esbuild bundles it into `server/dist/index.js` and pulls in the pure rules from `src/game/` and the shared monday/PokéAPI code from `src/api/boards/` and `src/api/pokeapi/`. The app and the server run the **same** rule code.
+- An Express 5 server lives in `server/` with its own `package.json`. esbuild bundles it into `server/dist/index.js` and pulls in the pure rules from `src/game/` and the shared monday/PokéAPI code from `src/api/boards/` and `src/api/pokeapi/`. The app and the server run the **same** rule code.
 - The platform services (Secure Storage, key-value Storage, Queue, Logger, Object storage) and Document DB sit behind small interfaces with in-memory fakes, so every route and handler can be unit-tested without monday.
 - The app talks to the server with `Authorization: Bearer <sessionToken>`. Telegram reaches the server only through a webhook. Battles always go route → Queue → `/mndy-queue` → engine → Document DB → board.
 
-**Tech Stack:** Node 22, TypeScript, Hono + `@hono/node-server`, `@mondaycom/apps-sdk@3.3.2`, `@mondaydotcomorg/api` (`ApiClient`, API version `2026-10`), `mongodb` driver, `jose` (JWT), esbuild, tsx, Vitest, `mongodb-memory-server` (tests), Telegram Bot API over `fetch` (no wrapper library). Bonus: `satori`, `@resvg/resvg-js`, `@fontsource/inter`.
+**Stack decided by Eden (2026-11-22):** Express 5, official `mongodb` driver, `jsonwebtoken`, Telegram over plain `fetch`, `supertest`, Vitest, `mongodb-memory-server`, tsx + esbuild.
+
+**Tech Stack:** Node 22, TypeScript, Express 5 (`express`, tests with `supertest`), `@mondaycom/apps-sdk@3.3.2`, `@mondaydotcomorg/api` (`ApiClient`, API version `2026-10`), `mongodb` driver, `jsonwebtoken` (JWT), esbuild, tsx, Vitest, `mongodb-memory-server` (tests), Telegram Bot API over `fetch` (no wrapper library). Bonus: `satori`, `@resvg/resvg-js`, `@fontsource/inter`.
 
 **Spec:** `~/Desktop/Pokémon Gym Manager — Phase 2 monday code server + Telegram bot.pdf` (the "Phase 2 spec"). v1 still applies: `docs/superpowers/specs/2026-11-17-pokemon-gym-manager-design.md`. Platform facts were checked against `@mondaycom/apps-sdk@3.3.2`, `@mondaycom/apps-cli@4.11.2` and the monday docs on 2026-11-22. They are listed under **Platform facts** below.
 
 ## Global Constraints
 
-- The server runs Node.js + TypeScript on **Hono**. The runtime is Node 22, set with `server/.mondaycoderc` `{"RUNTIME":"Node.js","RUNTIME_VERSION":"22.x.x"}`. The CLI allows 18/20/22.
+- The server runs Node.js + TypeScript on **Express 5** (Eden's choice, 2026-11-22). The runtime is Node 22, set with `server/.mondaycoderc` `{"RUNTIME":"Node.js","RUNTIME_VERSION":"22.x.x"}`. The CLI allows 18/20/22.
 - monday API version is **`2026-10`** everywhere, including `run_prompt`.
 - Secrets and config are read through the SDK (`SecretsManager`, `EnvironmentVariablesManager`) in `server/src/config.ts` only. Nothing is hard-coded. Secrets: `MONDAY_CLIENT_SECRET`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`. Env: `MONDAY_CLIENT_ID`, `SERVER_BASE_URL`, `TELEGRAM_BOT_USERNAME`.
 - Data location, exactly as in the spec:
@@ -101,11 +103,11 @@ server/
   scripts/set-webhook.ts
   src/
     index.ts                 # serve(app) on PORT
-    app.ts                   # createApp(deps): Hono — all routes mounted here
+    app.ts                   # createApp(deps): Express — all routes mounted here
     deps.ts                  # Deps interface + createRealDeps() (SDK + Mongo) ; fakes in test/fakes.ts
     config.ts                # loadConfig(): Config  (SDK managers)
     log/wideEvent.ts         # WideEvent, withEvent(), redact()
-    log/middleware.ts        # Hono middleware: one event per request
+    log/middleware.ts        # Express middleware: one event per request
     auth/sessionToken.ts     # verifySessionToken(), requireSession middleware
     auth/oauth.ts            # PKCE helpers + routes /api/oauth/start, /oauth/callback
     auth/tokenStore.ts       # TokenStore over SecureStorage (refresh, single-flight)
@@ -168,14 +170,14 @@ src/
   - `withEvent<T>(kind: 'http' | 'queue' | 'cron', fields: Record<string, unknown>, fn: (ev: WideEvent) => Promise<T>, traceId?: string): Promise<T>`
   - `interface LoggerPort { info(msg: string): void; error(msg: string, opts?: { error?: Error }): void }`
   - `interface Deps { config: Config; logger: LoggerPort; now: () => Date }`, extended by later tasks.
-  - `createApp(deps: Deps): Hono` with `GET /health` → `200 {"ok":true,"version":<package version>}`.
+  - `createApp(deps: Deps): Express` with `GET /health` → `200 {"ok":true,"version":<package version>}`.
 
 - [ ] **Step 1: Scaffold `server/`.**
   - `package.json`:
     - `"type":"module"`, `"engines":{"node":"22.x"}`
     - scripts: `dev` (`tsx watch --env-file=.env src/index.ts`), `bundle` (`node esbuild.config.mjs`), `start` (`node dist/index.js`), `typecheck` (`tsc --noEmit`), `test` (`vitest run`), `check` (`npm run typecheck && npm test && npm run bundle`). Task 9 adds `webhook:set`.
     - **no `build` script**
-    - deps: `hono`, `@hono/node-server`, `@mondaycom/apps-sdk@3.3.2`, `@mondaydotcomorg/api`, `mongodb`, `jose`
+    - deps: `express@5`, `@mondaycom/apps-sdk@3.3.2`, `@mondaydotcomorg/api`, `mongodb`, `jsonwebtoken`; devDeps add `supertest`, `@types/express`, `@types/jsonwebtoken`, `@types/supertest`
     - devDeps: `typescript`, `tsx`, `esbuild`, `vitest`, `@types/node`, `mongodb-memory-server`
   - `tsconfig.json`: `module`/`moduleResolution` `nodenext`, `strict`, `paths: {"@app/*": ["../src/*"]}`, includes `src`, `test`, `scripts`, and `../src/game` + `../src/api/GameApi.ts` + `../src/lib/messages.ts`.
   - `esbuild.config.mjs`: entry `src/index.ts` → `dist/index.js`, `platform:'node'`, `target:'node22'`, `format:'esm'`, `bundle:true`, `packages:'external'` (npm deps stay external; `../src` is bundled), tsconfig paths honored.
@@ -190,7 +192,7 @@ src/
     - `currentEvent() is visible inside awaited calls and undefined outside`.
   - `app.test.ts`:
     - `GET /health returns ok`.
-    - `every request emits one http event with method, path, status, durationMs`: use a fake logger and call `app.request('/health')`.
+    - `every request emits one http event with method, path, status, durationMs`: use a fake logger and call `request(app).get('/health')` (supertest).
   - `config.test.ts`:
     - `reads secrets from secret() and env from env()`.
     - `names all missing keys`: the message contains `MONDAY_CLIENT_SECRET` and `TELEGRAM_BOT_TOKEN`.
@@ -217,7 +219,7 @@ src/
      - Do `SecretsManager`/`EnvironmentVariablesManager` read `process.env` locally?
      - Was `dist/` uploaded?
      - The server URL format, and that client and server pushes coexist on one version.
-- [ ] **Step 9: Commit** `feat(server): hono skeleton on monday code with wide-event logging`.
+- [ ] **Step 9: Commit** `feat(server): express skeleton on monday code with wide-event logging`.
 - [ ] **Explain:** the buildpack (why there is no `build` script), `.mappsignore`, env vs secret, wide event vs log lines, and `traceId`.
 
 ---
@@ -301,15 +303,15 @@ The server must run the same GraphQL and mapping as the app. Move the transport-
     - `users.setBoards(userId, cfg: BoardConfig): Promise<boolean>` (false when no user doc)
     - `links.getByUser(userId)`
   - `interface Session { userId: Id; accountId: Id }`
-  - `verifySessionToken(token: string, clientSecret: string): Promise<Session>` (jose `jwtVerify`, HS256). It throws `AuthError`.
-  - Middleware `requireSession(deps)`. It sets `c.var.session` and adds `userId`/`accountId` to the event.
+  - `verifySessionToken(token: string, clientSecret: string): Promise<Session>` (jsonwebtoken `jwt.verify` with `algorithms: ['HS256']`). It throws `AuthError`.
+  - Middleware `requireSession(deps)`. It sets `res.locals.session` and adds `userId`/`accountId` to the event.
   - Routes:
     - `GET /api/me` → `{ connected: boolean, boardsKnown: boolean, telegram: { linked: boolean } }`
     - `PUT /api/me/boards` → 204, or 409 `{error:'NOT_CONNECTED'}`
   - Test fakes in `server/test/fakes.ts`: `fakeLogger()`, `fakeSecureStorage()`, `fakeKv()`, `fakeQueue()`, `fakeTelegram()`, `fakeMonday()` (a `GqlRequest` over in-memory boards seeded from `src/api/mock/fixtures.ts`), `testDb()` (mongodb-memory-server).
 
 - [ ] **Step 1: Write failing tests.**
-  - `sessionToken.test.ts` signs tokens with jose in the test:
+  - `sessionToken.test.ts` signs tokens with `jwt.sign` in the test:
     - `accepts a valid token and returns user and account`
     - `rejects a wrong secret`
     - `rejects an expired token`
