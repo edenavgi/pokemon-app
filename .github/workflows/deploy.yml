@@ -49,6 +49,8 @@ jobs:
       - run: npm ci
 
       - run: npm run build
+        env:
+          VITE_SERVER_URL: ${{ vars.SERVER_URL }} # the server's monday code URL
 
       - name: Install the monday apps CLI
         run: npm install -g @mondaycom/apps-cli@4.11.1
@@ -59,3 +61,38 @@ jobs:
 
       - name: Push dist/ to monday code
         run: mapps code:push --client-side --directoryPath dist --appId "$APP_ID" --appVersionId "$APP_VERSION_ID"
+
+  # The server (server/) goes to the same app version as the client.
+  # Its env vars and secrets are set once with `mapps code:env` / `mapps code:secret`, not here.
+  deploy-server:
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
+      APP_ID: ${{ vars.MONDAY_APP_ID }}
+      APP_VERSION_ID: ${{ vars.MONDAY_APP_VERSION_ID }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - run: npm ci
+        working-directory: server
+
+      # monday code only receives server/, so the shared src/game code is bundled in first
+      - run: npm run bundle
+        working-directory: server
+
+      - name: Install the monday apps CLI
+        run: npm install -g @mondaycom/apps-cli@4.11.2
+
+      - name: Log in to monday
+        run: mapps init --token "$MONDAY_TOKEN"
+
+      - name: Push server/ to monday code
+        run: mapps code:push --directoryPath server --appId "$APP_ID" --appVersionId "$APP_VERSION_ID"

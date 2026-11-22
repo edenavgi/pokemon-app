@@ -10,3 +10,8 @@ dist-ssr
 !.vscode/extensions.json
 .idea
 *.log
+
+# server (Phase 2)
+server/.env
+server/local-secure-storage.db.json
+server/code.tar.gz

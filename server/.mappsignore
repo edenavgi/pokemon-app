@@ -1,0 +1,11 @@
+node_modules
+src
+test
+scripts
+*.test.ts
+.env
+.env.example
+vitest.config.ts
+esbuild.config.mjs
+tsconfig.json
+code.tar.gz
