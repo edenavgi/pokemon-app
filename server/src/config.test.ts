@@ -5,6 +5,7 @@ const ENV = {
   MONDAY_CLIENT_ID: 'client-id',
   SERVER_BASE_URL: 'https://server.test',
   TELEGRAM_BOT_USERNAME: 'eden_gym_bot',
+  MNDY_MONGODB_CONNECTION_STRING: 'mongodb://localhost:27017/pokemon',
 }
 const SECRETS = {
   MONDAY_CLIENT_SECRET: 'client-secret',
@@ -25,12 +26,18 @@ describe('loadConfig', () => {
       mondayClientSecret: 'client-secret',
       telegramBotToken: 'bot-token',
       telegramWebhookSecret: 'webhook-secret',
+      mongoUri: 'mongodb://localhost:27017/pokemon',
       port: 8080,
     })
   })
 
   it('reads PORT from env', () => {
     expect(loadConfig(source({ ...ENV, PORT: '9090' }, SECRETS)).port).toBe(9090)
+  })
+
+  it('requires the Document DB connection string', () => {
+    const { MNDY_MONGODB_CONNECTION_STRING: _uri, ...rest } = ENV
+    expect(() => loadConfig(source(rest, SECRETS))).toThrow(/MNDY_MONGODB_CONNECTION_STRING/)
   })
 
   it('names all missing keys', () => {

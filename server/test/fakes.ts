@@ -1,6 +1,10 @@
 // In-memory stand-ins for the platform, so tests never call monday, Telegram or PokéAPI.
-// Later tasks add more fakes here (secure storage, queue, Telegram, monday boards, test DB).
+// Each task adds the fakes it needs (secure storage, queue, Telegram, monday boards…).
+import jwt from 'jsonwebtoken'
+import { MongoMemoryServer } from 'mongodb-memory-server'
+import { afterAll } from 'vitest'
 import type { Config } from '../src/config'
+import { connectDb, ensureIndexes, type Database } from '../src/db/mongo'
 import type { LoggerPort } from '../src/log/wideEvent'
 
 export function fakeLogger() {
@@ -23,7 +27,36 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     telegramBotToken: 'test-bot-token',
     telegramWebhookSecret: 'test-webhook-secret',
     telegramBotUsername: 'test_bot',
+    mongoUri: 'mongodb://unused-in-tests',
     port: 8080,
     ...overrides,
   }
+}
+
+/**
+ * A sessionToken shaped like the one monday gives the app (`monday.get('sessionToken')`):
+ * an HS256 JWT whose `dat` holds the user and account. Signed with `secret`.
+ */
+export function signSessionToken(
+  secret: string,
+  dat: Record<string, unknown> = { user_id: 101, account_id: 202 },
+  opts: jwt.SignOptions = { expiresIn: '5m' },
+): string {
+  return jwt.sign({ dat }, secret, { algorithm: 'HS256', ...opts })
+}
+
+// One in-memory MongoDB per test file (a real mongod, started on first use).
+let server: MongoMemoryServer | undefined
+let dbCount = 0
+afterAll(async () => {
+  await server?.stop()
+  server = undefined
+})
+
+/** A fresh, empty database with the real indexes, on the shared in-memory server. */
+export async function testDb(): Promise<Database> {
+  server ??= await MongoMemoryServer.create()
+  const db = await connectDb(server.getUri(), `test-${process.pid}-${++dbCount}`)
+  await ensureIndexes(db.db)
+  return db
 }

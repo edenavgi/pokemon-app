@@ -4,7 +4,10 @@ import { WideEvent, runWithEvent, type LoggerPort } from './wideEvent'
 /** The route pattern ("/battles/:id"), so logs group by route and never hold IDs from the URL. */
 function routePath(req: Request): string {
   const route = req.route as { path?: unknown } | undefined
-  return typeof route?.path === 'string' ? req.baseUrl + route.path : req.path
+  if (typeof route?.path === 'string') return req.baseUrl + route.path
+  // No route matched (404, or a middleware like requireSession answered first): the full path
+  // without the query. req.path alone would be relative to the router that answered.
+  return req.originalUrl.split('?')[0]
 }
 
 /**

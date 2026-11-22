@@ -8,14 +8,18 @@ const logger = new Logger(LOGGER_TAG)
 const boot = new WideEvent('boot')
 
 try {
-  const deps = createRealDeps(logger)
+  const { deps, database } = await createRealDeps(logger)
+  boot.set({ db: database.db.databaseName })
   createApp(deps).listen(deps.config.port, () => {
     boot.set({ port: deps.config.port, node: process.version, cloud: Boolean(process.env.K_SERVICE) })
     boot.emit(logger)
   })
 } catch (err) {
-  // Fail fast with a clear message (e.g. "Missing config: TELEGRAM_BOT_TOKEN").
+  // Fail fast with a clear message (e.g. "Missing config: TELEGRAM_BOT_TOKEN", or no Document DB).
   boot.error(err)
   boot.emit(logger)
+  // The deploy log of a failed `mapps code:push` shows the SDK Logger's lines only as "null",
+  // so also write the reason to stderr, where the push output shows it as plain text.
+  console.error(`[boot] ${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`)
   process.exit(1)
 }

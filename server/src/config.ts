@@ -7,6 +7,8 @@ export interface Config {
   telegramBotToken: string
   telegramWebhookSecret: string
   telegramBotUsername: string
+  /** Document DB (MongoDB). Set by monday code in the cloud; server/.env locally. */
+  mongoUri: string
   port: number
 }
 
@@ -21,6 +23,8 @@ const ENV_KEYS = {
   mondayClientId: 'MONDAY_CLIENT_ID',
   serverBaseUrl: 'SERVER_BASE_URL',
   telegramBotUsername: 'TELEGRAM_BOT_USERNAME',
+  // Provided by the platform (not `mapps code:env`), so it may live only in process.env
+  mongoUri: 'MNDY_MONGODB_CONNECTION_STRING',
 } as const
 
 // Secrets: `mapps code:secret` in the cloud (stored encrypted, separately from env).
@@ -32,18 +36,21 @@ const SECRET_KEYS = {
 
 const DEFAULT_PORT = 8080
 
+const isPlatformKey = (key: string) => key === 'PORT' || key.startsWith('MNDY_')
+
 /**
  * The real source. In the cloud the SDK managers read the files monday code mounts.
  * Locally (no K_SERVICE env var) the SDK managers read process.env themselves, which
  * `tsx --env-file=.env` fills from server/.env.
- * PORT is injected by the runtime (Cloud Run), not set through `mapps code:env`.
+ * PORT and MNDY_* (e.g. the Document DB connection string) are injected by the runtime,
+ * not set through `mapps code:env`, so they are also read from process.env.
  */
 export function sdkConfigSource(): ConfigSource {
   const env = new EnvironmentVariablesManager()
   const secrets = new SecretsManager()
   const str = (v: unknown) => (v === undefined || v === null || v === '' ? undefined : String(v))
   return {
-    env: (key) => str(env.get(key)) ?? (key === 'PORT' ? str(process.env.PORT) : undefined),
+    env: (key) => str(env.get(key)) ?? (isPlatformKey(key) ? str(process.env[key]) : undefined),
     secret: (key) => str(secrets.get(key)),
   }
 }
