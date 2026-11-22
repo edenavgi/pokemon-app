@@ -168,3 +168,27 @@ The app's **Object** feature ("Gym HQ", key `moveogroup_pokemon-gym-manager::gym
 - **Cache:** after the switch, a view that had been opened while the tunnel was down kept showing the ngrok error page until the browser was quit and reopened. The setting itself was already correct.
 - **Checked by Eden with the tunnel and `npm run dev` stopped:** item view + Talk, board view, widget, Spar/Transfer, the Status dialog and Gym HQ View all work.
 - Status & Evolve has no URL of its own: it opens the Dialog feature.
+
+## 13. The server on monday code (Phase 2, Task 1, 2026-11-22)
+
+`server/` is pushed with `mapps code:push -d server -a <APP_ID> -i <APP_VERSION_ID>` (CLI 4.11.1).
+
+- **Upload:** the CLI zips the folder using `server/.mappsignore`. The archive held exactly `.mappsignore`, `.mondaycoderc`, `dist/index.js` (+ map), `package.json` and `package-lock.json`, so `dist/` **is** uploaded when `.mappsignore` doesn't list it.
+  - The CLI leaves `code.tar.gz` behind in the pushed folder. It is in `.mappsignore` and `.gitignore`.
+- **Runtime version:** `.mondaycoderc` `RUNTIME_VERSION` must be a full version. The CLI checks `^(18|20|22)\.\d+\.\d+$`, so `"22.x.x"` is rejected before upload.
+  - monday code also **blocks unpatched runtimes**. `22.14.0` failed with "Deployment blocked: … vulnerable to CVE-2026-111497 … Update Node.js to 22.23.4 or higher (Node 22)". We use `22.23.4`.
+- **Env and secrets need a server release first.** Before any server deployment, `mapps code:env` / `code:secret` fail with `No monday code release found for this app` (HTTP 400).
+  - The client-side CDN push doesn't count.
+  - Without `--verbose` the CLI prints nothing, only a failed exit code.
+  - A **failed** deployment is enough to create the release.
+  - Order for a new app: push → set env/secrets → push again.
+- **A deployment only succeeds if the container listens on port 8080.** "In order for the deployment to be successful, the container should be up and listen on port 8080." A server that exits at boot (missing config) fails the deployment, and the push prints the container's stdout.
+- **CLI noise:** after "Asset uploaded successfully" the CLI often prints "Unexpected error occurred while communicating with the remote server". The deployment still continues. Check it with `mapps code:status -i <APP_VERSION_ID>` (`building-infra` → `successful` / `failed`, with `errorMessage`). The first deployment takes a few minutes.
+- **URL:** `https://<hash>-service-<number>-<hash>.us.monday.app` (`us` is the region), shown by `code:status` once the deployment succeeds.
+- **Config through the SDK:** `EnvironmentVariablesManager` / `SecretsManager` (apps-sdk 3.3.2):
+  - In the cloud they read the file monday code mounts at `/secrets/$SECRET_NAME`.
+  - Locally (`K_SERVICE` unset) they return `process.env`, which `tsx --env-file=.env` fills. So the same code runs in both places.
+  - `PORT` is not part of `code:env`; the runtime sets it.
+- **Logs:** each `Logger.info(JSON)` line shows in `mapps code:logs -i <APP_VERSION_ID> -t console -s live` as `[console]{…}`, and in Developer Center → **Host on monday** → logs. One `/health` request = one line: `{"kind":"http","traceId":"…","method":"GET","path":"/health","status":200,"durationMs":1}`.
+  - The push's deploy log printed lines of literally `null` before our boot error. They are not our events, which arrive as normal JSON.
+- **Through the tunnel:** Vite on 5173 forwards only `/api`, `/oauth` and `/telegram` to the server, so `/health` through the tunnel reaches Vite, not the server. Check it at `http://localhost:8080/health`; tunnel checks start with the first `/api` route (Task 3).

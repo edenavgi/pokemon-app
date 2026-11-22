@@ -63,17 +63,32 @@ Set each feature's URL in the Developer Center to `<tunnel URL>/#/<route>` and *
 
 The app needs OAuth scopes (Developer Center → Build → OAuth & permissions). See `docs/verify-early.md` §3.
 
+## Server (Phase 2)
+
+`server/` is a Node.js + TypeScript server (Express 5) for monday code. It has its own `package.json`. esbuild bundles it, together with the shared rules from `src/game/`, into `server/dist/index.js`. monday code only receives the `server/` folder, so the bundle is built before every push.
+
+```bash
+cp server/.env.example server/.env   # fill in the values (never commit .env)
+npm --prefix server install
+npm --prefix server run dev          # http://localhost:8080/health, reloads on save
+```
+
+With `npm run dev` running as well, the Vite dev server forwards `/api`, `/oauth` and `/telegram` to the local server, so the one tunnel on port 5173 reaches both.
+
+Deploy by hand: `npm --prefix server run bundle && mapps code:push -d server -a <APP_ID> -i <APP_VERSION_ID>`. The server reads its settings through the monday code SDK: plain settings with `mapps code:env`, secrets with `mapps code:secret` (see `server/.env.example` for the keys).
+
 ## Checks
 
 ```bash
 npx vitest run        # 214 tests
 npm run typecheck
 npm run build
+npm --prefix server run check   # server: typecheck, tests, bundle
 ```
 
 GitHub Actions runs the same checks, plus `npm run lint`, on every PR and every push to `main` (`.github/workflows/ci.yml`).
 
-After those checks pass on `main`, `.github/workflows/deploy.yml` pushes `dist/` to monday code (`mapps code:push --client-side`) for the draft version. It needs the secret `MONDAY_TOKEN` and the variables `MONDAY_APP_ID` and `MONDAY_APP_VERSION_ID` in the repo settings.
+After those checks pass on `main`, `.github/workflows/deploy.yml` pushes `dist/` to monday code (`mapps code:push --client-side`) and the bundled `server/` (`mapps code:push`) for the draft version. It needs the secret `MONDAY_TOKEN` and the variables `MONDAY_APP_ID` and `MONDAY_APP_VERSION_ID` in the repo settings.
 
 ## Docs
 

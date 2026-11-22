@@ -10,11 +10,21 @@ export default defineConfig({
   resolve: {
     alias: { '@': path.resolve(import.meta.dirname, 'src') },
   },
-  server: { port: 5173, allowedHosts: true }, // allowedHosts needed for the mapps tunnel
+  server: {
+    port: 5173,
+    allowedHosts: true, // needed for the mapps tunnel
+    // One tunnel serves the app AND the local server (server/, port 8080):
+    // these paths go to the server, everything else to Vite.
+    proxy: {
+      '/api': 'http://localhost:8080',
+      '/oauth': 'http://localhost:8080',
+      '/telegram': 'http://localhost:8080',
+    },
+  },
   test: {
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
     globals: false,
-    exclude: [...configDefaults.exclude, '.superpowers/**'],
+    exclude: [...configDefaults.exclude, '.superpowers/**', 'server/**'], // server/ has its own Vitest config
   },
 })
