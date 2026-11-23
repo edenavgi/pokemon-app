@@ -92,6 +92,7 @@ export interface GameApi {
   getServerStatus(): Promise<ServerStatus>
   startMondayOAuth(): Promise<void> // opens monday's consent screen in a new tab
   syncBoardConfig(cfg: BoardConfig): Promise<void> // tells the server which boards the game uses
+  startTelegramLink(): Promise<void> // gets a one-time link code and opens t.me/<bot>?start=<code> in a new tab
   /** Queues a battle on the server; rejects with ServerError (400 v1 code, 409 NOT_CONNECTED / NO_BOARDS). */
   startBattle(gymAId: Id, gymBId: Id): Promise<{ battleId: Id }>
   getBattle(battleId: Id, opts: { turns: boolean }): Promise<{ battle: BattleView; turns?: ArenaTurn[] }>

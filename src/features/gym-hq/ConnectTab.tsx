@@ -11,7 +11,9 @@ export const CONNECT_POLL_MS = 2000
 /** …for at most 2 minutes. */
 export const CONNECT_MAX_WAIT_MS = 120_000
 
-type Phase = 'idle' | 'starting' | 'waiting' | 'timedOut'
+/** What the tab can be waiting for: the OAuth callback, or /start in Telegram. */
+type Target = 'monday' | 'telegram'
+const reached = (s: ServerStatus, target: Target) => (target === 'monday' ? s.connected : s.telegramLinked)
 
 export function ConnectTab({
   cfg,
@@ -26,30 +28,33 @@ export function ConnectTab({
   const { data: loaded, error, reload } = useAsync(() => api.getServerStatus(), [api])
   // The latest status: from the first load, then from polling and from the board sync
   const [status, setStatus] = useState<ServerStatus>()
-  const [phase, setPhase] = useState<Phase>('idle')
-  const [problem, setProblem] = useState<string>()
+  const [starting, setStarting] = useState<Target>() // asking the server for the link
+  const [waiting, setWaiting] = useState<Target>() // the link is open in another tab; polling
+  const [timedOut, setTimedOut] = useState<Target>() // stopped polling; focus still checks
+  const [problem, setProblem] = useState<{ target: Target; text: string }>()
   const current = status ?? loaded
 
-  // Poll while waiting for the user to approve in monday's tab; stop when connected or after the max wait.
+  // Poll while the user acts in the other tab; stop when it worked or after the max wait.
   useEffect(() => {
-    if (phase !== 'waiting') return
+    if (!waiting) return
     let stopped = false
     const deadline = Date.now() + maxWaitMs
     const timer = setInterval(async () => {
       if (Date.now() >= deadline) {
         stopped = true
         clearInterval(timer)
-        setPhase('timedOut')
+        setWaiting(undefined)
+        setTimedOut(waiting)
         return
       }
       try {
         const next = await api.getServerStatus()
         if (stopped) return
         setStatus(next)
-        if (next.connected) {
+        if (reached(next, waiting)) {
           stopped = true
           clearInterval(timer)
-          setPhase('idle')
+          setWaiting(undefined)
         }
       } catch {
         // a missed poll is not an error worth showing; the next one tries again
@@ -59,12 +64,13 @@ export function ConnectTab({
       stopped = true
       clearInterval(timer)
     }
-  }, [phase, api, pollMs, maxWaitMs])
+  }, [waiting, api, pollMs, maxWaitMs])
 
-  // Coming back to this tab (after approving in monday's tab) → check at once. Browsers also slow
-  // down timers in tabs and frames that are not in front, so polling alone can lag.
+  // Coming back to this tab (after approving in monday or pressing Start in Telegram) → check at once.
+  // Browsers also slow down timers in tabs and frames that are not in front, so polling alone can lag.
+  const watching = waiting ?? timedOut
   useEffect(() => {
-    if (phase !== 'waiting' && phase !== 'timedOut') return
+    if (!watching) return
     let active = true
     const checkNow = async () => {
       if (document.visibilityState === 'hidden') return
@@ -72,7 +78,10 @@ export function ConnectTab({
         const next = await api.getServerStatus()
         if (!active) return
         setStatus(next)
-        if (next.connected) setPhase('idle')
+        if (reached(next, watching)) {
+          setWaiting(undefined)
+          setTimedOut(undefined)
+        }
       } catch {
         // the next poll or focus tries again
       }
@@ -84,7 +93,7 @@ export function ConnectTab({
       window.removeEventListener('focus', checkNow)
       document.removeEventListener('visibilitychange', checkNow)
     }
-  }, [phase, api])
+  }, [watching, api])
 
   // Connected but the server doesn't know the boards → send them, once.
   const synced = useRef(false)
@@ -95,25 +104,32 @@ export function ConnectTab({
       .syncBoardConfig(cfg)
       .then(() => api.getServerStatus())
       .then(setStatus)
-      .catch((e: unknown) => setProblem(e instanceof Error ? e.message : String(e)))
+      .catch((e: unknown) => setProblem({ target: 'monday', text: e instanceof Error ? e.message : String(e) }))
   }, [current, api, cfg])
 
   if (error && !current) return <ErrorState error={error} onRetry={reload} />
   if (!current) return <Loading />
 
-  const connect = async () => {
+  /** Opens monday's consent screen or the bot's t.me link, then waits for the server to see the result. */
+  const begin = async (target: Target) => {
     setProblem(undefined)
-    setPhase('starting')
+    setTimedOut(undefined)
+    setStarting(target)
     try {
-      await api.startMondayOAuth()
-      setPhase('waiting')
+      await (target === 'monday' ? api.startMondayOAuth() : api.startTelegramLink())
+      setWaiting(target)
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : String(e))
-      setPhase('idle')
+      setProblem({ target, text: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setStarting(undefined)
     }
   }
 
-  const busy = phase === 'starting' || phase === 'waiting'
+  const busy = (target: Target) => starting === target || waiting === target
+  const note = (target: Target, waitingText: string, timedOutText: string) =>
+    waiting === target ? waitingText : timedOut === target ? timedOutText : undefined
+  const alert = (target: Target) =>
+    problem?.target === target && <p role="alert" className="text-sm text-destructive">{problem.text}</p>
 
   return (
     <div className="flex max-w-xl flex-col gap-6 p-2">
@@ -127,13 +143,13 @@ export function ConnectTab({
           </>
         ) : (
           <>
-            <p className="text-sm">{phase === 'waiting' ? t.waiting : phase === 'timedOut' ? t.timedOut : t.notConnected}</p>
+            <p className="text-sm">{note('monday', t.waiting, t.timedOut) ?? t.notConnected}</p>
             <div>
-              <Button onClick={connect} disabled={busy}>{t.connectMonday}</Button>
+              <Button onClick={() => begin('monday')} disabled={busy('monday')}>{t.connectMonday}</Button>
             </div>
           </>
         )}
-        {problem && <p role="alert" className="text-sm text-destructive">{problem}</p>}
+        {alert('monday')}
       </section>
 
       <section className="flex flex-col gap-2">
@@ -141,19 +157,16 @@ export function ConnectTab({
         <p className="text-sm text-muted-foreground">
           {current.telegramLinked ? t.telegramLinked : current.connected ? t.telegramHint : t.telegramNeedsMonday}
         </p>
-        <TelegramButton enabled={current.connected} />
+        {note('telegram', t.telegramWaiting, t.telegramTimedOut) && (
+          <p className="text-sm">{note('telegram', t.telegramWaiting, t.telegramTimedOut)}</p>
+        )}
+        <div>
+          <Button variant="outline" disabled={!current.connected || busy('telegram')} onClick={() => begin('telegram')}>
+            {current.telegramLinked ? t.relinkTelegram : t.connectTelegram}
+          </Button>
+        </div>
+        {alert('telegram')}
       </section>
-    </div>
-  )
-}
-
-// Linking Telegram arrives in Task 9; until then the button only says so.
-function TelegramButton({ enabled }: { enabled: boolean }) {
-  const [clicked, setClicked] = useState(false)
-  return (
-    <div className="flex flex-col items-start gap-1">
-      <Button variant="outline" disabled={!enabled} onClick={() => setClicked(true)}>{t.connectTelegram}</Button>
-      {clicked && <p className="text-xs text-muted-foreground">{t.telegramSoon}</p>}
     </div>
   )
 }

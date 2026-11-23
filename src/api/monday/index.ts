@@ -169,6 +169,14 @@ export function createMondayGameApi(): GameApi {
         .catch((e: unknown) => console.warn('[startMondayOAuth] could not open the consent tab', e))
     },
     syncBoardConfig: (cfg) => server.put('/api/me/boards', cfg),
+    // The server makes a one-time code; the t.me link carries it to the bot (/start <code>).
+    startTelegramLink: async () => {
+      const { url } = await server.post<{ url: string }>('/api/telegram/link-code')
+      // Not awaited, like startMondayOAuth: openLinkInTab never answers (verify-early §16)
+      monday
+        .execute('openLinkInTab', { url })
+        .catch((e: unknown) => console.warn('[startTelegramLink] could not open Telegram', e))
+    },
 
     // The Arena runs on the server: it answers 202 at once and plays the battle from its queue
     startBattle: (gymAId, gymBId) => server.post<{ battleId: string }>('/api/battles', { gymAId, gymBId }),

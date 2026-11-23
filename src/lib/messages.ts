@@ -173,5 +173,7 @@ export const connectText = {
   telegramNeedsMonday: 'Connect monday first.',
   telegramLinked: 'A Telegram chat is linked.',
   connectTelegram: 'Connect Telegram',
-  telegramSoon: 'Telegram linking is the next step of the project.',
+  telegramWaiting: 'Press Start in Telegram to link the chat…',
+  telegramTimedOut: 'No chat linked yet. Press Start in Telegram, or try again (the link works for 10 minutes).',
+  relinkTelegram: 'Link another chat',
 } as const

@@ -2,7 +2,7 @@ import { fakeQueue } from '../../test/fakeMonday'
 import request from 'supertest'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { GqlRequest } from '@app/api/boards/gateway'
-import { fakeAccessToken, fakeLogger, fakeSecureStorage, signSessionToken, testConfig, testDb } from '../../test/fakes'
+import { fakeAccessToken, fakeLogger, fakeSecureStorage, fakeTelegram, signSessionToken, testConfig, testDb } from '../../test/fakes'
 import { createApp } from '../app'
 import type { Database } from '../db/mongo'
 import { createRepos } from '../db/repos'
@@ -46,7 +46,7 @@ async function setup(owner = { id: 101, account: { id: 202 } }) {
   }
   const app = createApp({
     config, logger: log.logger, now, repos, tokens, oauth, mondayWithToken,
-    mondayFor: () => notUsed, pokeApiFor: () => ({ getMoveset: notUsed, getTypeChart: notUsed }), queue: fakeQueue(),
+    mondayFor: () => notUsed, pokeApiFor: () => ({ getMoveset: notUsed, getTypeChart: notUsed }), queue: fakeQueue(), telegram: fakeTelegram(),
   })
   return { app, repos, secure, oauth, meCalls, tick: (ms: number) => (t += ms), ...log }
 }

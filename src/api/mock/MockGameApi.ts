@@ -27,6 +27,7 @@ export class MockGameApi implements GameApi {
   /** The fake server's view of the user; tests change it to simulate OAuth finishing. */
   serverStatus: ServerStatus = { connected: false, boardsKnown: false, telegramLinked: false }
   oauthStarts = 0
+  telegramLinkStarts = 0
   syncedBoards: BoardConfig[] = []
 
   private pokemon = new Map<Id, PokemonRow>()
@@ -112,6 +113,11 @@ export class MockGameApi implements GameApi {
   }
   async getServerStatus() { await this.wait(); return { ...this.serverStatus } }
   async startMondayOAuth() { await this.wait(); this.oauthStarts++ }
+  async startTelegramLink() {
+    await this.wait()
+    if (!this.serverStatus.connected) throw new Error('Connect monday first')
+    this.telegramLinkStarts++
+  }
   async syncBoardConfig(cfg: BoardConfig) {
     await this.wait()
     if (!this.serverStatus.connected) throw new Error('Connect monday first')

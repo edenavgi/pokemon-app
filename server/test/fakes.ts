@@ -79,3 +79,14 @@ export function fakeSecureStorage() {
 export function fakeAccessToken(expSeconds: number, label = 'access'): string {
   return jwt.sign({ exp: expSeconds, label }, 'monday-side-secret')
 }
+
+/** The Telegram Bot API, recording what the bot would send (the real one: src/telegram/api.ts). */
+export function fakeTelegram() {
+  const sent: { chatId: string; text: string }[] = []
+  return {
+    sent,
+    sendMessage: async (chatId: string, text: string) => void sent.push({ chatId, text }),
+    sendPhoto: async () => {},
+    setWebhook: async () => {},
+  }
+}

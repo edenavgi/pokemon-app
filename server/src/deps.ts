@@ -9,11 +9,12 @@ import { loadConfig, type Config } from './config'
 import { connectDb, ensureIndexes, type Database } from './db/mongo'
 import { createRepos, type Repos } from './db/repos'
 import type { LoggerPort } from './log/wideEvent'
+import { createTelegramApi, type TelegramPort } from './telegram/api'
 
 /**
  * Everything the app needs from the outside world. Routes receive it instead of
  * creating SDK clients themselves, so tests can pass fakes.
- * Later tasks add: kv, telegram, objectStorage.
+ * Later tasks add: kv, objectStorage.
  */
 
 /** The part of the SDK Queue we use (monday code: Google Pub/Sub; locally: a POST to ourselves). */
@@ -37,6 +38,8 @@ export interface Deps {
   /** PokéAPI for work done for this user (Task 13 caches it in their key-value Storage) */
   pokeApiFor: (userId: Id) => Pick<PokeApi, 'getMoveset' | 'getTypeChart'>
   queue: QueuePort
+  /** The Telegram Bot API (@eden_gym_bot) */
+  telegram: TelegramPort
 }
 
 export const LOGGER_TAG = 'pokemon-server'
@@ -65,7 +68,7 @@ export async function createRealDeps(logger: LoggerPort = new Logger(LOGGER_TAG)
   return {
     deps: {
       config, logger, now, repos: createRepos(database.db, now), tokens, oauth, mondayWithToken,
-      mondayFor, pokeApiFor: () => pokeApi, queue,
+      mondayFor, pokeApiFor: () => pokeApi, queue, telegram: createTelegramApi(config.telegramBotToken),
     },
     database,
   }

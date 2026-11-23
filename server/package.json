@@ -12,7 +12,8 @@
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "npm run typecheck && npm test && npm run bundle"
+    "check": "npm run typecheck && npm test && npm run bundle",
+    "webhook:set": "tsx --env-file=.env scripts/set-webhook.ts"
   },
   "dependencies": {
     "@mondaycom/apps-sdk": "3.3.2",
