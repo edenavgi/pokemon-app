@@ -48,3 +48,24 @@ export function allowedTransitions(p: Pokemon): { to: Status[]; canRest: boolean
       return { to: ['Training'], canRest: true }
   }
 }
+
+/**
+ * After an Arena battle, every Pokémon that fought loses 1 Energy (the v1 cost of a spar).
+ * At 0 it goes to Resting; otherwise its status stays.
+ */
+export function applyBattleFatigue(p: Pokemon): PokemonPatch {
+  const energy = Math.max(0, p.energy - 1)
+  return { energy, status: energy === 0 ? 'Resting' : p.status }
+}
+
+/**
+ * The hourly cron: +1 Energy up to MAX_ENERGY. A Resting Pokémon that reaches full Energy
+ * gets the v1 Rest status: Ready at level ≥ 5, otherwise Training (Eden's decision, 2026-11-23).
+ * null = already full, nothing to write.
+ */
+export function applyRegen(p: Pokemon): PokemonPatch | null {
+  if (p.energy >= MAX_ENERGY) return null
+  const energy = p.energy + 1
+  if (p.status === 'Resting' && energy === MAX_ENERGY) return { energy, status: deriveStatus({ level: p.level, energy }) }
+  return { energy }
+}
