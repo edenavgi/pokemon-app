@@ -1,3 +1,4 @@
+import { fakeQueue } from '../test/fakeMonday'
 import request from 'supertest'
 import { afterEach, describe, expect, it } from 'vitest'
 import { fakeLogger, fakeSecureStorage, signSessionToken, testConfig, testDb } from '../test/fakes'
@@ -22,7 +23,10 @@ async function setup() {
   }
   const oauth = { exchangeCode: unused, refresh: unused }
   const tokens = new TokenStore(fakeSecureStorage(), oauth, now)
-  const app = createApp({ config, logger: log.logger, now, repos, tokens, oauth, mondayWithToken: () => unused })
+  const app = createApp({
+    config, logger: log.logger, now, repos, tokens, oauth, mondayWithToken: () => unused,
+    mondayFor: () => unused, pokeApiFor: () => ({ getMoveset: unused, getTypeChart: unused }), queue: fakeQueue(),
+  })
   return { app, repos, database, ...log }
 }
 afterEach(async () => {
