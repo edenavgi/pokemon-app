@@ -135,13 +135,27 @@ export const gymHqText = {
   gymA: 'First gym',
   gymB: 'Second gym',
   battle: 'Battle',
-  battling: 'Battling…',
   needTwoGyms: 'Pick two different gyms to battle.',
-  columns: { round: '#', a: 'A', scoreA: 'Score', b: 'B', scoreB: 'Score', winner: 'Winner' },
-  draw: 'Draw',
-  headline: (winner: string | null, wins: [number, number]) =>
-    winner === null ? `It's a draw, ${wins[0]}–${wins[1]}.` : `${winner} wins the battle!`,
-  postFailed: 'The battle was played, but the update could not be posted on the gym items.',
+  // the battle runs on the server (Phase 2); the tab waits for it, then replays it
+  queued: 'Battle queued…',
+  timedOut: 'The battle is taking longer than usual. It will show up under Recent battles when it ends; try again later.',
+  failed: (error: string) => `The battle failed on the server (${error}). Try again.`,
+  connectFirst: 'Connect to monday first, on the Connect tab.',
+  recent: 'Recent battles',
+  replay: 'Replay',
+  fromTelegram: 'Telegram',
+  versus: (a: string, b: string) => `${a} vs ${b}`,
+} as const
+
+export const replayText = {
+  skip: 'Skip',
+  hp: (hp: number, max: number) => `${hp}/${max} HP`,
+  effectiveness: (e: number) => (e === 0 ? ' It had no effect.' : e > 1 ? " It's super effective!" : e < 1 ? " It's not very effective." : ''),
+  turn: (n: number, attacker: string, move: string) => `Turn ${n}: ${attacker} used ${move}.`,
+  damage: (defender: string, damage: number) => ` ${defender} lost ${damage} HP.`,
+  fainted: (defender: string) => ` ${defender} fainted!`,
+  headline: (winner: string | null, mvp: string | null) =>
+    (winner === null ? "It's a draw." : `${winner} wins!`) + (mvp ? ` MVP: ${mvp}` : ''),
 } as const
 
 export const connectText = {
