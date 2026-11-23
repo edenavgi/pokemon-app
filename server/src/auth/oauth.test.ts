@@ -1,3 +1,4 @@
+import { fakeQueue } from '../../test/fakeMonday'
 import request from 'supertest'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { GqlRequest } from '@app/api/boards/gateway'
@@ -40,7 +41,13 @@ async function setup(owner = { id: 101, account: { id: 202 } }) {
     meCalls.push(token)
     return { me: { id: owner.id, name: 'Eden', account: { id: owner.account.id, name: 'Moveo' } } } as T
   }
-  const app = createApp({ config, logger: log.logger, now, repos, tokens, oauth, mondayWithToken })
+  const notUsed = async () => {
+    throw new Error('not used in this test')
+  }
+  const app = createApp({
+    config, logger: log.logger, now, repos, tokens, oauth, mondayWithToken,
+    mondayFor: () => notUsed, pokeApiFor: () => ({ getMoveset: notUsed, getTypeChart: notUsed }), queue: fakeQueue(),
+  })
   return { app, repos, secure, oauth, meCalls, tick: (ms: number) => (t += ms), ...log }
 }
 

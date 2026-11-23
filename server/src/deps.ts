@@ -1,8 +1,10 @@
-import { Logger, SecureStorage } from '@mondaycom/apps-sdk'
+import { Logger, Queue, SecureStorage } from '@mondaycom/apps-sdk'
 import type { GqlRequest } from '@app/api/boards/gateway'
+import type { Id } from '@app/api/GameApi'
+import { createPokeApi, fetchPokeApi, memoryPokeCache, type PokeApi } from '@app/api/pokeapi/loaders'
 import { createMondayOAuth, type OAuthPort } from './auth/oauth'
 import { TokenStore } from './auth/tokenStore'
-import { mondayRequest } from './monday/client'
+import { mondayRequest, mondayRequestFor } from './monday/client'
 import { loadConfig, type Config } from './config'
 import { connectDb, ensureIndexes, type Database } from './db/mongo'
 import { createRepos, type Repos } from './db/repos'
@@ -11,8 +13,14 @@ import type { LoggerPort } from './log/wideEvent'
 /**
  * Everything the app needs from the outside world. Routes receive it instead of
  * creating SDK clients themselves, so tests can pass fakes.
- * Later tasks add: queue, kv, telegram, objectStorage.
+ * Later tasks add: kv, telegram, objectStorage.
  */
+
+/** The part of the SDK Queue we use (monday code: Google Pub/Sub; locally: a POST to ourselves). */
+export interface QueuePort {
+  publishMessage(message: string): Promise<string>
+  validateMessageSecret(secret: string): boolean
+}
 export interface Deps {
   config: Config
   logger: LoggerPort
@@ -24,6 +32,11 @@ export interface Deps {
   oauth: OAuthPort
   /** monday GraphQL with a given access token (the OAuth callback checks me() with the new one) */
   mondayWithToken: (accessToken: string) => GqlRequest
+  /** monday GraphQL as this user, with their stored OAuth token */
+  mondayFor: (userId: Id) => GqlRequest
+  /** PokéAPI for work done for this user (Task 13 caches it in their key-value Storage) */
+  pokeApiFor: (userId: Id) => Pick<PokeApi, 'getMoveset' | 'getTypeChart'>
+  queue: QueuePort
 }
 
 export const LOGGER_TAG = 'pokemon-server'
@@ -46,5 +59,14 @@ export async function createRealDeps(logger: LoggerPort = new Logger(LOGGER_TAG)
     now,
   )
   const mondayWithToken = (accessToken: string) => mondayRequest(async () => accessToken)
-  return { deps: { config, logger, now, repos: createRepos(database.db, now), tokens, oauth, mondayWithToken }, database }
+  const mondayFor = (userId: Id) => mondayRequestFor(tokens, userId)
+  const pokeApi = createPokeApi(fetchPokeApi, memoryPokeCache()) // per process until Task 13
+  const queue = new Queue()
+  return {
+    deps: {
+      config, logger, now, repos: createRepos(database.db, now), tokens, oauth, mondayWithToken,
+      mondayFor, pokeApiFor: () => pokeApi, queue,
+    },
+    database,
+  }
 }

@@ -234,3 +234,21 @@ Tested on the deployed server, started from the Gym HQ View iframe console (`POS
   - The user was created at 14:56:31.163 by the OAuth callback.
   - The boards were sent by the tab at 14:56:31.462, 0.3 s later, with no refresh.
   - The token was in the local Secure Storage file under `monday-token:<userId>`.
+
+## 17. The queue and a battle on monday code (Phase 2, Task 7, 2026-11-23)
+
+Tested on the deployed draft version: `POST /api/battles` from the Gym HQ View iframe console (Cinnabar Gym vs Pewter Gym), then `GET /api/battles/<id>?turns=1` every second.
+
+- **`/mndy-queue` gets our message as raw JSON, not a Pub/Sub envelope.** The body's keys were exactly `v, battleId, traceId`, and there was no `message.data` base64. `parseQueueBody` still accepts the envelope, which costs nothing.
+- **It is Google Pub/Sub push underneath.** The request had:
+  - `content-type: application/json` and `user-agent: APIs-Google`;
+  - `x-goog-pubsub-delivery-attempt`, `x-goog-pubsub-message-id`, `x-goog-pubsub-subscription-name`, `x-goog-pubsub-publish-time`;
+  - an `authorization` header (most likely Google's OIDC token). We don't check it; `?secret=` is what we validate.
+  - The `queue` event now logs `deliveryAttempt` from that header; a value > 1 is a redelivery.
+- **Timing:** the message arrived within about a second of the `202`. The whole run took 5.2 s (7 monday calls, 9 turns, 2 board changes), and monday code waits for our `200` until the work is done.
+- **traceId:** the `queue` event carries the traceId of the `POST /api/battles` request, so `mapps code:logs -i <versionId> -t console -s live` shows both under one id. The `POST /mndy-queue` request itself gets its own `http` event with its own traceId.
+- **Board:** only the two fighters that fought lost 1 Energy, and the winner's gym item got one update. Checked by Eden.
+- **The client-side CDN caches `index.html` for a year.** It answers `cache-control: public, max-age=31536000` for `index.html` too. The iframe URL doesn't change between deploys (only the part after `#`), so a browser that has already loaded it keeps the old app.
+  - Seen: Gym HQ View had no Connect tab although the CDN's `index.html` (last-modified that morning) had it. DevTools → Network → "Disable cache" + reload fixed it.
+  - Quitting Chrome doesn't help, because the cache is on disk. This also explains the stale view in §12.
+  - Users get new app code only when their cached copy is evicted. To be decided: how to make deploys reach them.

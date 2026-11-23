@@ -53,7 +53,7 @@ export function allowedTransitions(p: Pokemon): { to: Status[]; canRest: boolean
  * After an Arena battle, every Pokémon that fought loses 1 Energy (the v1 cost of a spar).
  * At 0 it goes to Resting; otherwise its status stays.
  */
-export function applyBattleFatigue(p: Pokemon): PokemonPatch {
+export function applyBattleFatigue(p: Pick<Pokemon, 'energy' | 'status'>): PokemonPatch {
   const energy = Math.max(0, p.energy - 1)
   return { energy, status: energy === 0 ? 'Resting' : p.status }
 }

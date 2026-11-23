@@ -3,6 +3,7 @@ import express, { type Express } from 'express'
 import pkg from '../package.json' with { type: 'json' }
 import { meRoutes } from './api/me'
 import { oauthCallback, oauthStart } from './auth/oauth'
+import { battleRoutes, queueRoute } from './battle/routes'
 import { requireSession } from './auth/sessionToken'
 import type { Deps } from './deps'
 import { errorHandler, wideEventMiddleware } from './log/middleware'
@@ -39,6 +40,10 @@ export function createApp(deps: Deps): Express {
   app.use('/api', requireSession(deps))
   app.use('/api/me', meRoutes(deps))
   app.post('/api/oauth/start', oauthStart(deps))
+  app.use('/api/battles', battleRoutes(deps))
+
+  // monday code's Queue delivers our messages here (checked with the queue secret, not a sessionToken)
+  app.post('/mndy-queue', ...queueRoute(deps))
 
   // monday sends the user's browser here after the consent screen (no sessionToken: the state proves who)
   app.get('/oauth/callback', oauthCallback(deps))
