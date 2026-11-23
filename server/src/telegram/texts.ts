@@ -1,5 +1,6 @@
 // What the bot says. Plain text (no Markdown), so names with * or _ can't break a message.
-import type { Pokemon } from '@app/api/GameApi'
+import type { Pokemon, Status } from '@app/api/GameApi'
+import { MAX_ENERGY } from '@app/game/constants'
 
 const list = (names: string[]) => names.join(', ')
 
@@ -26,4 +27,12 @@ export const texts = {
   ambiguousPokemon: (matches: Pokemon[]) =>
     ['More than one Pokémon matches. Use the id:',
       ...matches.map((p) => `${p.name} (${p.gym?.name ?? 'no gym'}, Lv ${p.level}, id ${p.id})`)].join('\n'),
+
+  // writes (Task 11)
+  trained: (p: Pick<Pokemon, 'name' | 'level' | 'energy' | 'status'>) =>
+    `${p.name}: Lv ${p.level} — ${p.status} — ⚡${p.energy}/${MAX_ENERGY}`,
+  canEvolve: (name: string, target: string) => `${name} can evolve into ${target}! Evolve it in Gym HQ (Status & Evolve).`,
+  rested: (p: Pick<Pokemon, 'name' | 'level' | 'energy' | 'status'>) =>
+    `${p.name} rested: Lv ${p.level} — ${p.status} — ⚡${p.energy}/${MAX_ENERGY}`,
+  cantRest: (name: string, status: Status) => `${name} is ${status}. Only a Resting Pokémon can rest.`,
 } as const

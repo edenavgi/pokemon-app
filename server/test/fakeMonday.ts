@@ -35,6 +35,7 @@ export function fakeMonday() {
   const writes: { itemId: string; values: Record<string, unknown> }[] = []
   let failWrites = 0
   let failReads = 0
+  let writeCalls = 0
 
   const cv = (title: string, fields: Record<string, unknown>) => ({ text: null, value: null, column: { title }, ...fields })
   const num = (title: string, n: number) => cv(title, { text: String(n), value: JSON.stringify(String(n)) })
@@ -95,6 +96,7 @@ export function fakeMonday() {
         failWrites--
         throw new Error('fakeMonday: write failed (simulated)')
       }
+      writeCalls++
       for (let i = 0; `item${i}` in variables; i++) {
         const values = JSON.parse(String(variables[`values${i}`])) as Record<string, unknown>
         writes.push({ itemId: String(variables[`item${i}`]), values })
@@ -140,6 +142,8 @@ export function fakeMonday() {
     failNextWrites(n = 1) {
       failWrites = n
     },
+    /** How many column-write requests were made (one request can change many items). */
+    writeCalls: () => writeCalls,
     /** The next `n` reads (queries) fail, like monday being down. */
     failNextReads(n = 1) {
       failReads = n
