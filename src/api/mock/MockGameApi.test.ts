@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { ServerError } from '../server/serverClient'
 import { MockGameApi } from './MockGameApi'
 
 const make = (opts?: ConstructorParameters<typeof MockGameApi>[0]) => new MockGameApi(opts)
@@ -130,5 +131,50 @@ describe('MockGameApi', () => {
     await vi.advanceTimersByTimeAsync(60)
     expect(done).toBe(true)
     vi.useRealTimers()
+  })
+
+  describe('the fake server arena', () => {
+    it('startBattle runs the arena in memory: queued for `battlePolls` reads, then done with every turn', async () => {
+      const api = make({ battlePolls: 2 })
+      const { battleId } = await api.startBattle('g1', 'g2')
+      expect((await api.getBattle(battleId, { turns: false })).battle.status).toBe('queued')
+      expect((await api.getBattle(battleId, { turns: false })).battle.status).toBe('queued')
+      const { battle, turns } = await api.getBattle(battleId, { turns: true })
+      expect(battle).toMatchObject({ id: battleId, status: 'done', source: 'app', gymA: { id: 'g1', name: 'Cinnabar Gym' } })
+      expect(turns!.length).toBe(battle.outcome!.turnCount)
+      expect(turns!.map((t) => t.n)).toEqual(turns!.map((_, i) => i + 1))
+      expect(turns![0].move).not.toBe('Struggle') // fixture movesets are used
+    })
+
+    it('getBattle leaves out the turns unless asked', async () => {
+      const api = make()
+      const { battleId } = await api.startBattle('g1', 'g2')
+      expect((await api.getBattle(battleId, { turns: false })).turns).toBeUndefined()
+    })
+
+    it('startBattle rejects like the server: 400 with the v1 error code', async () => {
+      const api = make()
+      await expect(api.startBattle('g1', 'g1')).rejects.toMatchObject({ status: 400, code: 'SAME_GYM' })
+      await api.updatePokemon([{ id: 'p3', patch: { status: 'Resting' } }])
+      await expect(api.startBattle('g1', 'g2')).rejects.toBeInstanceOf(ServerError)
+      await expect(api.startBattle('g1', 'g2')).rejects.toMatchObject({ code: 'B_NOT_ELIGIBLE' })
+    })
+
+    it('does not change the board (the real server does that)', async () => {
+      const api = make()
+      const before = JSON.stringify(await api.listPokemon())
+      const { battleId } = await api.startBattle('g1', 'g2')
+      await api.getBattle(battleId, { turns: true })
+      expect(JSON.stringify(await api.listPokemon())).toBe(before)
+      expect(api.updates).toEqual([])
+    })
+
+    it('listBattles returns the newest first, up to the limit', async () => {
+      const api = make()
+      const first = await api.startBattle('g1', 'g2')
+      const second = await api.startBattle('g2', 'g3')
+      expect((await api.listBattles()).map((b) => b.id)).toEqual([second.battleId, first.battleId])
+      expect(await api.listBattles(1)).toHaveLength(1)
+    })
   })
 })

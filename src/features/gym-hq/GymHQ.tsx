@@ -35,7 +35,7 @@ function Hq({ cfg }: { cfg: BoardConfig }) {
       </TabsList>
       <TabsContent value="gyms"><GymsTab gyms={gyms} reload={reload} /></TabsContent>
       <TabsContent value="recruit"><RecruitTab gyms={gyms} reload={reload} /></TabsContent>
-      <TabsContent value="arena"><ArenaTab gyms={gyms} /></TabsContent>
+      <TabsContent value="arena"><ArenaTab gyms={gyms} reload={reload} /></TabsContent>
       <TabsContent value="connect"><ConnectTab cfg={cfg} /></TabsContent>
     </Tabs>
   )

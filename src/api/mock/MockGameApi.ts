@@ -1,8 +1,11 @@
+import { simulateArena, toArenaTeam, validateArena } from '../../game/arena'
+import { mulberry32 } from '../../game/rng'
 import type {
-  AppContext, BoardConfig, ServerStatus, EvolutionInfo, GameApi, Gym, Id, NoticeType, Pokemon, PokemonPatch,
+  AppContext, ArenaTurn, BattleView, BoardConfig, ServerStatus, EvolutionInfo, GameApi, Gym, Id, NoticeType, Pokemon, PokemonPatch,
   PokeType, SpeciesDetail, SpeciesSummary, Status, TypeChart, Unsubscribe,
 } from '../GameApi'
-import { EVOLUTIONS, SEED_GYMS, SEED_POKEMON, SPECIES, TYPE_CHART } from './fixtures'
+import { ServerError } from '../server/serverClient'
+import { EVOLUTIONS, MOVESETS, SEED_GYMS, SEED_POKEMON, SPECIES, TYPE_CHART } from './fixtures'
 
 interface PokemonRow {
   id: Id; name: string; dexNumber: number; types: PokeType[]; spriteUrl: string
@@ -11,7 +14,12 @@ interface PokemonRow {
 }
 interface GymRow { id: Id; name: string; type: PokeType | null }
 
-export interface MockOptions { context?: Partial<AppContext>; delayMs?: number; failTalk?: boolean }
+export interface MockOptions {
+  context?: Partial<AppContext>; delayMs?: number; failTalk?: boolean
+  /** Fake server arena: how many getBattle reads say 'queued' before 'done' (default 1). */
+  battlePolls?: number
+}
+interface MockBattle { view: BattleView; turns: ArenaTurn[]; pollsLeft: number }
 
 export class MockGameApi implements GameApi {
   notices: { message: string; type: NoticeType }[] = []
@@ -30,6 +38,8 @@ export class MockGameApi implements GameApi {
   private contextListeners = new Set<(ctx: AppContext) => void>()
   private itemListeners = new Map<Id, Set<() => void>>()
 
+  private battles: MockBattle[] = [] // newest last
+  private nextBattle = 1
   private opts: MockOptions
 
   constructor(opts: MockOptions = {}) {
@@ -52,6 +62,11 @@ export class MockGameApi implements GameApi {
   setContext(partial: Partial<AppContext>): void {
     this.context = { ...this.context, ...partial }
     for (const cb of [...this.contextListeners]) cb({ ...this.context })
+  }
+
+  /** Pretends the battle was started from Telegram. */
+  markTelegram(battleId: Id): void {
+    this.battle(battleId).view.source = 'telegram'
   }
 
   // --- internals ---
@@ -81,6 +96,11 @@ export class MockGameApi implements GameApi {
     if (!r) throw new Error(`Pokemon ${id} not found`)
     return r
   }
+  private battle(id: Id): MockBattle {
+    const b = this.battles.find((x) => x.view.id === id)
+    if (!b) throw new ServerError(404, 'NOT_FOUND')
+    return b
+  }
   private fire(id: Id) {
     for (const cb of [...(this.itemListeners.get(id) ?? [])]) cb()
   }
@@ -97,6 +117,44 @@ export class MockGameApi implements GameApi {
     if (!this.serverStatus.connected) throw new Error('Connect monday first')
     this.syncedBoards.push({ ...cfg })
     this.serverStatus.boardsKnown = true
+  }
+  // The fake server arena: plays the whole battle at once in memory and never touches the board
+  // (the real server applies Energy and posts the update; the app only shows the replay).
+  async startBattle(gymAId: Id, gymBId: Id) {
+    await this.wait()
+    const [a, b] = [await this.getGym(gymAId), await this.getGym(gymBId)]
+    const valid = validateArena(a, b)
+    if (!valid.ok) throw new ServerError(400, valid.error)
+    const run = simulateArena(toArenaTeam(a, MOVESETS), toArenaTeam(b, MOVESETS), TYPE_CHART, mulberry32(this.nextBattle))
+    const turns: ArenaTurn[] = []
+    let step = run.next()
+    while (!step.done) {
+      turns.push(step.value)
+      step = run.next()
+    }
+    const view: BattleView = {
+      id: `battle-${this.nextBattle++}`, source: 'app', status: 'done', createdAt: new Date().toISOString(),
+      gymA: { id: a.id, name: a.name }, gymB: { id: b.id, name: b.name }, outcome: step.value,
+    }
+    this.battles.push({ view, turns, pollsLeft: this.opts.battlePolls ?? 1 })
+    return { battleId: view.id }
+  }
+  async getBattle(battleId: Id, opts: { turns: boolean }) {
+    await this.wait()
+    const b = this.battle(battleId)
+    const view = this.battleView(b)
+    if (b.pollsLeft > 0) b.pollsLeft--
+    return { battle: view, ...(opts.turns && view.status === 'done' ? { turns: [...b.turns] } : {}) }
+  }
+  async listBattles(limit = 10) {
+    await this.wait()
+    return this.battles.slice(-limit).reverse().map((b) => this.battleView(b))
+  }
+  /** Until `battlePolls` reads have passed, the battle still looks queued (no outcome yet). */
+  private battleView(b: MockBattle): BattleView {
+    if (b.pollsLeft === 0) return { ...b.view }
+    const { outcome: _o, ...queued } = b.view
+    return { ...queued, status: 'queued' }
   }
   async getBoardConfig() { await this.wait(); return this.boardConfig }
   async setBoardConfig(cfg: BoardConfig) { await this.wait(); this.boardConfig = cfg }

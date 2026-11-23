@@ -7,7 +7,7 @@
 // (Phase 2) runs exactly the same code with a user's token instead.
 import mondaySdk from 'monday-sdk-js'
 import { SeamlessApiClient } from '@mondaydotcomorg/api'
-import type { AppContext, BoardConfig, GameApi, ServerStatus, ThemeName } from '../GameApi'
+import type { AppContext, ArenaTurn, BattleView, BoardConfig, GameApi, ServerStatus, ThemeName } from '../GameApi'
 import { createBoardGateway, type GqlRequest } from '../boards/gateway'
 import { CACHE_KEYS, createPokeApi, fetchPokeApi, memoryPokeCache, type PokeCache } from '../pokeapi/loaders'
 import { createServerClient } from '../server/serverClient'
@@ -31,6 +31,10 @@ const server = createServerClient(import.meta.env.VITE_SERVER_URL ?? '', async (
   const res = await monday.get('sessionToken')
   return String(res.data)
 })
+
+// The server's battle document (BattleView in server/src/battle/service.ts) → the app's BattleView
+type ServerBattle = Omit<BattleView, 'id'> & { _id: string }
+const toBattle = ({ _id, ...rest }: ServerBattle): BattleView => ({ ...rest, id: _id })
 
 // Global SDK storage key (shared by every widget/view of the app in this account)
 const BOARD_CONFIG_KEY = 'boardConfig'
@@ -165,6 +169,19 @@ export function createMondayGameApi(): GameApi {
         .catch((e: unknown) => console.warn('[startMondayOAuth] could not open the consent tab', e))
     },
     syncBoardConfig: (cfg) => server.put('/api/me/boards', cfg),
+
+    // The Arena runs on the server: it answers 202 at once and plays the battle from its queue
+    startBattle: (gymAId, gymBId) => server.post<{ battleId: string }>('/api/battles', { gymAId, gymBId }),
+    getBattle: async (battleId, opts) => {
+      const res = await server.get<{ battle: ServerBattle; turns?: ArenaTurn[] }>(
+        `/api/battles/${encodeURIComponent(battleId)}?turns=${opts.turns ? 1 : 0}`,
+      )
+      return { battle: toBattle(res.battle), ...(res.turns ? { turns: res.turns } : {}) }
+    },
+    listBattles: async (limit = 10) => {
+      const res = await server.get<{ battles: ServerBattle[] }>(`/api/battles?limit=${limit}`)
+      return res.battles.map(toBattle)
+    },
 
     talk: async (prompt) => {
       try {

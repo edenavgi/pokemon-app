@@ -1,5 +1,5 @@
 import type {
-  EvolutionInfo, Id, PokeType, SpeciesDetail, Status, TypeChart,
+  EvolutionInfo, Id, Move, PokeType, SpeciesDetail, Status, TypeChart,
 } from '../GameApi'
 
 // Real PokeAPI values, hardcoded once. The app never fetches anything.
@@ -137,3 +137,19 @@ export const SEED_POKEMON: SeedPokemon[] = [
   { id: 'p15', dexNumber: 6, level: 36, energy: 3, status: 'Ready', gymId: null }, // fully evolved
 ]
 
+
+// Damaging moves for the mock arena (the real server loads them from PokéAPI): Tackle + one move per type.
+const TYPE_MOVES: Partial<Record<PokeType, Move>> = {
+  Fire: { name: 'Ember', type: 'Fire', power: 40 },
+  Water: { name: 'Water Gun', type: 'Water', power: 40 },
+  Grass: { name: 'Vine Whip', type: 'Grass', power: 45 },
+  Electric: { name: 'Thunder Shock', type: 'Electric', power: 40 },
+  Poison: { name: 'Sludge', type: 'Poison', power: 65 },
+  Flying: { name: 'Wing Attack', type: 'Flying', power: 60 },
+  Psychic: { name: 'Confusion', type: 'Psychic', power: 50 },
+  Steel: { name: 'Metal Claw', type: 'Steel', power: 50 },
+}
+const TACKLE: Move = { name: 'Tackle', type: 'Normal', power: 40 }
+export const MOVESETS = new Map<number, Move[]>(
+  SPECIES.map((s) => [s.dexNumber, [TACKLE, ...s.types.flatMap((t) => (TYPE_MOVES[t] ? [TYPE_MOVES[t]] : []))]]),
+)

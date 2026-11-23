@@ -1,3 +1,5 @@
+import type { ArenaOutcome, ArenaTurn } from '../game/arena'
+
 export const POKE_TYPES = [
   'Normal', 'Fire', 'Water', 'Grass', 'Electric', 'Ice', 'Fighting', 'Poison', 'Ground',
   'Flying', 'Psychic', 'Bug', 'Rock', 'Ghost', 'Dragon', 'Dark', 'Steel', 'Fairy',
@@ -46,6 +48,22 @@ export interface ServerStatus {
   telegramLinked: boolean
 }
 
+// The Arena runs on the server (Phase 2); these are what the app sees of a battle.
+export type { ArenaOutcome, ArenaTurn }
+export type BattleStatus = 'queued' | 'running' | 'done' | 'failed'
+export interface BattleView {
+  id: Id
+  source: 'app' | 'telegram'
+  status: BattleStatus
+  gymA: { id: Id; name: string }
+  gymB: { id: Id; name: string }
+  outcome?: ArenaOutcome
+  summary?: string
+  error?: string
+  createdAt: string // ISO
+  finishedAt?: string
+}
+
 export interface GameApi {
   listBoards(): Promise<{ id: Id; name: string }[]>
   getBoardConfig(): Promise<BoardConfig | null>
@@ -74,4 +92,8 @@ export interface GameApi {
   getServerStatus(): Promise<ServerStatus>
   startMondayOAuth(): Promise<void> // opens monday's consent screen in a new tab
   syncBoardConfig(cfg: BoardConfig): Promise<void> // tells the server which boards the game uses
+  /** Queues a battle on the server; rejects with ServerError (400 v1 code, 409 NOT_CONNECTED / NO_BOARDS). */
+  startBattle(gymAId: Id, gymBId: Id): Promise<{ battleId: Id }>
+  getBattle(battleId: Id, opts: { turns: boolean }): Promise<{ battle: BattleView; turns?: ArenaTurn[] }>
+  listBattles(limit?: number): Promise<BattleView[]> // newest first, the user's Gyms board, app + Telegram
 }
