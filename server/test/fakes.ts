@@ -88,5 +88,6 @@ export function fakeTelegram() {
     sendMessage: async (chatId: string, text: string) => void sent.push({ chatId, text }),
     sendPhoto: async () => {},
     setWebhook: async () => {},
+    setMyCommands: async () => {},
   }
 }

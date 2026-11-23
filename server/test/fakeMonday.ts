@@ -34,6 +34,7 @@ export function fakeMonday() {
   const updates: { itemId: string; body: string }[] = []
   const writes: { itemId: string; values: Record<string, unknown> }[] = []
   let failWrites = 0
+  let failReads = 0
 
   const cv = (title: string, fields: Record<string, unknown>) => ({ text: null, value: null, column: { title }, ...fields })
   const num = (title: string, n: number) => cv(title, { text: String(n), value: JSON.stringify(String(n)) })
@@ -80,6 +81,11 @@ export function fakeMonday() {
 
   const request: GqlRequest = async <T,>(query: string, variables: Record<string, unknown> = {}): Promise<T> => {
     const answer = (data: unknown) => structuredClone(data) as T
+    const isWrite = query.includes('create_update') || query.includes('change_multiple_column_values')
+    if (!isWrite && failReads > 0) {
+      failReads--
+      throw new Error('fakeMonday: read failed (simulated)')
+    }
     if (query.includes('create_update')) {
       updates.push({ itemId: String(variables.itemId), body: String(variables.body) })
       return answer({ create_update: { id: `u${updates.length}` } })
@@ -125,6 +131,7 @@ export function fakeMonday() {
 
   return {
     request,
+    gyms,
     pokemon,
     updates,
     writes,
@@ -132,6 +139,10 @@ export function fakeMonday() {
     /** The next `n` column writes fail, like a monday error mid-way. */
     failNextWrites(n = 1) {
       failWrites = n
+    },
+    /** The next `n` reads (queries) fail, like monday being down. */
+    failNextReads(n = 1) {
+      failReads = n
     },
   }
 }

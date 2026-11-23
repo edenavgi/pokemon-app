@@ -10,10 +10,12 @@ import type { Session } from '../auth/sessionToken'
 import { ReconnectNeededError } from '../auth/tokenStore'
 import type { Deps } from '../deps'
 import type { WideEvent } from '../log/wideEvent'
+import { parseCommand } from './args'
+import { COMMANDS } from './commands'
 import { hashCode, LINK_CODE_TTL_MS, newLinkCode } from './linking'
 import { texts } from './texts'
 
-export type TelegramDeps = Pick<Deps, 'config' | 'repos' | 'tokens' | 'now' | 'mondayFor' | 'telegram'>
+export type TelegramDeps = Pick<Deps, 'config' | 'repos' | 'tokens' | 'now' | 'mondayFor' | 'pokeApiFor' | 'telegram'>
 
 /** The part of a Telegram Update we read. https://core.telegram.org/bots/api#update */
 interface TgUpdate {
@@ -85,17 +87,34 @@ async function handleUpdate(deps: TelegramDeps, ev: WideEvent, update: TgUpdate)
     return
   }
   const chat = String(chatId)
-  // "/start@eden_gym_bot abc" → command "/start", arg "abc". Only the command is logged (the arg may be a code).
-  const [first = '', arg = ''] = text.trim().split(/\s+/, 2)
-  const command = first.startsWith('/') ? first.split('@')[0].toLowerCase() : undefined
-  ev.set({ chatId: chat, command: command ?? 'text' })
+  const cmd = parseCommand(text, deps.config.telegramBotUsername)
+  // Only the command name is logged: its args may be a link code
+  ev.set({ chatId: chat, command: cmd ? `/${cmd.name}` : 'text' })
 
-  if (command === '/start' && arg) {
-    await handleStart(deps, chat, arg)
+  if (cmd?.name === 'start' && cmd.args[0]) {
+    await handleStart(deps, chat, cmd.args[0])
     return
   }
-  const resolved = await resolveChat(deps, chat)
-  await deps.telegram.sendMessage(chat, resolved.ok ? texts.unknownCommand : resolved.reply)
+  await deps.telegram.sendMessage(chat, await runCommand(deps, ev, chat, cmd))
+}
+
+/** Runs a command for a linked chat and returns the reply. Plain text and unknown commands get the help. */
+async function runCommand(
+  deps: TelegramDeps, ev: WideEvent, chatId: string, cmd: { name: string; args: string[] } | null,
+): Promise<string> {
+  const resolved = await resolveChat(deps, chatId)
+  if (!resolved.ok) return resolved.reply
+  ev.set({ userId: resolved.userId, accountId: resolved.accountId })
+  const handler = (cmd && Object.hasOwn(COMMANDS, cmd.name) ? COMMANDS[cmd.name] : undefined) ?? COMMANDS.help
+  try {
+    return await handler({
+      chatId, userId: resolved.userId, accountId: resolved.accountId, boards: resolved.boards,
+      gateway: resolved.gateway, pokeApi: deps.pokeApiFor(resolved.userId), deps,
+    }, cmd?.args ?? [])
+  } catch (err) {
+    ev.error(err) // the event shows what failed; the user gets a short, friendly reply
+    return err instanceof ReconnectNeededError ? texts.reconnect : texts.oops
+  }
 }
 
 /** /start <code>: the code (single use, 10 min) says which monday user this chat belongs to. */

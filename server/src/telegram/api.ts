@@ -12,6 +12,8 @@ export interface TelegramPort {
   sendMessage(chatId: string, text: string): Promise<void>
   sendPhoto(chatId: string, png: Buffer, caption: string): Promise<void>
   setWebhook(url: string, secret: string): Promise<void>
+  /** The command menu Telegram shows when the user types "/". */
+  setMyCommands(commands: { command: string; description: string }[]): Promise<void>
 }
 
 /** Telegram answered ok:false. The message has the method and Telegram's description, never the token. */
@@ -111,6 +113,9 @@ export function createTelegramApi(
     },
     async setWebhook(url, secret) {
       await call('setWebhook', json({ url, secret_token: secret, allowed_updates: ['message'] }))
+    },
+    async setMyCommands(commands) {
+      await call('setMyCommands', json({ commands }))
     },
   }
 }
