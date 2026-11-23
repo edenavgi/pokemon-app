@@ -5,7 +5,7 @@ import { TYPE_CHART } from '@app/api/mock/fixtures'
 import { simulateArena, type ArenaTurn } from '@app/game/arena'
 import { mulberry32 } from '@app/game/rng'
 import { battleErrorText } from '@app/lib/messages'
-import { fakeLogger, fakeSecureStorage, signSessionToken, testConfig, testDb } from '../../test/fakes'
+import { fakeLogger, fakeSecureStorage, fakeTelegram, signSessionToken, testConfig, testDb } from '../../test/fakes'
 import { fakeMonday, fakeQueue } from '../../test/fakeMonday'
 import { createApp } from '../app'
 import { TokenStore } from '../auth/tokenStore'
@@ -54,6 +54,7 @@ async function setup({ connect = true, boards = true } = {}) {
     mondayFor: () => monday.request,
     pokeApiFor: () => pokeApi,
     queue,
+    telegram: fakeTelegram(),
   })
 
   /** Starts a battle as user 101 and returns its id. */

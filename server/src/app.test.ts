@@ -1,7 +1,7 @@
 import { fakeQueue } from '../test/fakeMonday'
 import request from 'supertest'
 import { afterEach, describe, expect, it } from 'vitest'
-import { fakeLogger, fakeSecureStorage, signSessionToken, testConfig, testDb } from '../test/fakes'
+import { fakeLogger, fakeSecureStorage, fakeTelegram, signSessionToken, testConfig, testDb } from '../test/fakes'
 import { TokenStore } from './auth/tokenStore'
 import { createApp } from './app'
 import type { Database } from './db/mongo'
@@ -25,7 +25,7 @@ async function setup() {
   const tokens = new TokenStore(fakeSecureStorage(), oauth, now)
   const app = createApp({
     config, logger: log.logger, now, repos, tokens, oauth, mondayWithToken: () => unused,
-    mondayFor: () => unused, pokeApiFor: () => ({ getMoveset: unused, getTypeChart: unused }), queue: fakeQueue(),
+    mondayFor: () => unused, pokeApiFor: () => ({ getMoveset: unused, getTypeChart: unused }), queue: fakeQueue(), telegram: fakeTelegram(),
   })
   return { app, repos, database, ...log }
 }

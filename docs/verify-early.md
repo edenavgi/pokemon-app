@@ -252,3 +252,12 @@ Tested on the deployed draft version: `POST /api/battles` from the Gym HQ View i
   - Seen: Gym HQ View had no Connect tab although the CDN's `index.html` (last-modified that morning) had it. DevTools → Network → "Disable cache" + reload fixed it.
   - Quitting Chrome doesn't help, because the cache is on disk. This also explains the stale view in §12.
   - Users get new app code only when their cached copy is evicted. To be decided: how to make deploys reach them.
+
+## 18. Linking a Telegram chat (Phase 2, Task 9, 2026-11-23)
+
+Tested on the deployed draft version: Gym HQ → Connect → Connect Telegram, with the bot's webhook set to the cloud URL (`server/scripts/set-webhook.ts`).
+
+- **`openLinkInTab` opens the `https://t.me/<bot>?start=<code>` page**, which then tries `tg://resolve?domain=<bot>&start=<code>`. Without the Telegram desktop app, Chrome logs "scheme does not have a registered handler" and the Start button does nothing.
+  - Sending `/start <code>` to the bot by hand, from the phone or Telegram Web, does the same thing. Eden decided not to add a QR code or a copyable code to the Connect tab.
+- The code (43 chars of base64url) fits Telegram's 64-char `start` parameter.
+- The link code is single use and lives 10 minutes, so a code seen in the address bar, a screenshot or chat history is useless once it is used or expired.

@@ -64,3 +64,20 @@ describe('MondayGameApi battles (the server)', () => {
     expect(list.map((b) => b.id)).toEqual(['b1'])
   })
 })
+
+describe('MondayGameApi.startTelegramLink', () => {
+  it('asks the server for a link code and opens the t.me link without waiting for openLinkInTab', async () => {
+    const url = 'https://t.me/eden_gym_bot?start=abc'
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ url }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const started = createMondayGameApi().startTelegramLink()
+    const outcome = await Promise.race([started.then(() => 'returned'), new Promise((r) => setTimeout(() => r('stuck'), 200))])
+
+    expect(outcome).toBe('returned')
+    const [path, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(path).toMatch(/\/api\/telegram\/link-code$/)
+    expect(init.method).toBe('POST')
+    expect(sdk.execute).toHaveBeenCalledWith('openLinkInTab', { url })
+  })
+})

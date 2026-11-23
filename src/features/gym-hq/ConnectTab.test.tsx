@@ -114,4 +114,37 @@ describe('ConnectTab', () => {
     document.dispatchEvent(new Event('visibilitychange'))
     expect(await screen.findByText(t.connected)).toBeInTheDocument()
   })
+
+  describe('Connect Telegram', () => {
+    it('asks the server for a link, opens it, and waits for the chat to be linked', async () => {
+      const { api } = setup({ connected: true, boardsKnown: true })
+      await userEvent.click(await screen.findByRole('button', { name: t.connectTelegram }))
+      expect(api.telegramLinkStarts).toBe(1)
+      expect(await screen.findByText(t.telegramWaiting)).toBeInTheDocument()
+
+      api.serverStatus.telegramLinked = true // the user pressed Start in Telegram
+      expect(await screen.findByText(t.telegramLinked)).toBeInTheDocument()
+      expect(screen.queryByText(t.telegramWaiting)).not.toBeInTheDocument()
+    })
+
+    it('gives up waiting after the max wait, and the button works again', async () => {
+      setup({ connected: true, boardsKnown: true })
+      await userEvent.click(await screen.findByRole('button', { name: t.connectTelegram }))
+      expect(await screen.findByText(t.telegramTimedOut, {}, { timeout: 1000 })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: t.connectTelegram })).toBeEnabled()
+    })
+
+    it('shows the error when the server refuses', async () => {
+      const { api } = setup({ connected: true, boardsKnown: true })
+      vi.spyOn(api, 'startTelegramLink').mockRejectedValueOnce(new Error('Server error 409 NOT_CONNECTED'))
+      await userEvent.click(await screen.findByRole('button', { name: t.connectTelegram }))
+      expect(await screen.findByRole('alert')).toHaveTextContent('NOT_CONNECTED')
+    })
+
+    it('when a chat is already linked, the button links a different chat', async () => {
+      setup({ connected: true, boardsKnown: true, telegramLinked: true })
+      expect(await screen.findByText(t.telegramLinked)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: t.relinkTelegram })).toBeEnabled()
+    })
+  })
 })
