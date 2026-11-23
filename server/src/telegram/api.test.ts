@@ -56,6 +56,14 @@ describe('createTelegramApi', () => {
     expect(json(calls[0])).toEqual({ url: 'https://server.test/telegram/webhook', secret_token: 's3cret', allowed_updates: ['message'] })
   })
 
+  it('setMyCommands sends the command menu', async () => {
+    const { fetchImpl, calls } = fakeFetch(OK)
+    const commands = [{ command: 'gyms', description: 'List your gyms' }]
+    await createTelegramApi(TOKEN, fetchImpl).setMyCommands(commands)
+    expect(calls[0].url).toMatch(/\/setMyCommands$/)
+    expect(json(calls[0])).toEqual({ commands })
+  })
+
   it('sendMessage retries once on 429 with retry_after 1', async () => {
     const { fetchImpl, calls } = fakeFetch({ status: 429, body: { ok: false, parameters: { retry_after: 1 } } }, OK)
     const sleep = vi.fn(async () => {})
