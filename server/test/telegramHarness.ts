@@ -3,6 +3,7 @@
 import request from 'supertest'
 import { afterEach, vi } from 'vitest'
 import type { GqlRequest } from '@app/api/boards/gateway'
+import { EVOLUTIONS } from '@app/api/mock/fixtures'
 import { createApp } from '../src/app'
 import { OAuthError } from '../src/auth/oauth'
 import { TokenStore } from '../src/auth/tokenStore'
@@ -75,7 +76,7 @@ export async function telegramSetup() {
 
   const deps = {
     config, logger: log.logger, now, repos, tokens, oauth,
-    mondayWithToken: () => unused, mondayFor, pokeApiFor: () => ({ getMoveset: unused, getTypeChart: unused }),
+    mondayWithToken: () => unused, mondayFor, pokeApiFor: () => ({ getMoveset: unused, getTypeChart: unused, getEvolution: async (dex: number) => EVOLUTIONS[dex] }),
     queue,
     telegram,
   }

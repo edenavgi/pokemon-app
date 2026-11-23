@@ -46,7 +46,7 @@ async function setup(owner = { id: 101, account: { id: 202 } }) {
   }
   const app = createApp({
     config, logger: log.logger, now, repos, tokens, oauth, mondayWithToken,
-    mondayFor: () => notUsed, pokeApiFor: () => ({ getMoveset: notUsed, getTypeChart: notUsed }), queue: fakeQueue(), telegram: fakeTelegram(),
+    mondayFor: () => notUsed, pokeApiFor: () => ({ getMoveset: notUsed, getTypeChart: notUsed, getEvolution: notUsed }), queue: fakeQueue(), telegram: fakeTelegram(),
   })
   return { app, repos, secure, oauth, meCalls, tick: (ms: number) => (t += ms), ...log }
 }

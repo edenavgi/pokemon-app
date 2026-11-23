@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { sparErrorText } from '@app/lib/messages'
 import { telegramSetup as setup } from '../../test/telegramHarness'
 import { BOT_COMMANDS, helpText } from './commands'
 import { texts } from './texts'
@@ -70,8 +71,8 @@ describe('the command router', () => {
     for (const c of BOT_COMMANDS) expect(helpText()).toContain(`/${c.command}`)
   })
 
-  it('BOT_COMMANDS (the Telegram menu) has gyms, roster and help, in Telegram\'s format', () => {
-    expect(BOT_COMMANDS.map((c) => c.command)).toEqual(['gyms', 'roster', 'help'])
+  it('BOT_COMMANDS (the Telegram menu) has gyms, roster, train, rest and help, in Telegram\'s format', () => {
+    expect(BOT_COMMANDS.map((c) => c.command)).toEqual(['gyms', 'roster', 'train', 'rest', 'help'])
     for (const c of BOT_COMMANDS) {
       expect(c.command).toMatch(/^[a-z0-9_]{1,32}$/)
       expect(c.description.length).toBeGreaterThanOrEqual(1)
@@ -121,5 +122,114 @@ describe('the command router', () => {
     await tokens.save('101', { accessToken: 'x', refreshToken: 'r', exp: 0 }) // expired; refresh fails with invalid_grant
     await say('555', '/gyms')
     expect(repliesTo('555')).toEqual([texts.reconnect])
+  })
+})
+
+// Fixture Pokémon: Cinnabar Gym — Charmander p1 (Lv 5, ⚡3, Ready, stage 1) and Charmeleon p2 (Lv 18, ⚡2, Training, stage 2);
+// Cerulean Gym — Squirtle p3 (Lv 7, ⚡3, Ready) and Wartortle p4 (Lv 16, ⚡1, Resting).
+describe('/train', () => {
+  it('two Pokémon in the same gym → both level +1, energy −1, deriveStatus, in ONE board write', async () => {
+    const { linkedChat, say, repliesTo, monday } = await setup()
+    await linkedChat()
+    await say('555', '/train charmander charmeleon')
+    expect(monday.pokemon.get('p1')).toMatchObject({ level: 6, energy: 2, status: 'Ready' })
+    expect(monday.pokemon.get('p2')).toMatchObject({ level: 19, energy: 1, status: 'Ready' })
+    expect(monday.writeCalls()).toBe(1)
+    const reply = repliesTo('555')[0]
+    expect(reply).toContain(texts.trained(monday.pokemon.get('p1')!))
+    expect(reply).toContain(texts.trained(monday.pokemon.get('p2')!))
+  })
+
+  it('reaching the evolve level (3 at stage 1) mentions it can evolve; below it, nothing', async () => {
+    const { linkedChat, say, repliesTo, monday } = await setup()
+    await linkedChat()
+    monday.pokemon.get('p1')!.level = 2 // Charmander → 3: can evolve into Charmeleon
+    await say('555', '/train charmander charmeleon')
+    expect(repliesTo('555')[0]).toContain(texts.canEvolve('Charmander', 'Charmeleon'))
+
+    monday.pokemon.get('p1')!.level = 0 // → 1: not yet
+    await say('555', '/train charmander charmeleon')
+    expect(repliesTo('555')[1]).not.toContain(texts.canEvolve('Charmander', 'Charmeleon'))
+  })
+
+  it('across gyms → sparErrorText(DIFFERENT_GYMS) and no write', async () => {
+    const { linkedChat, say, repliesTo, monday } = await setup()
+    await linkedChat()
+    await say('555', '/train charmander squirtle')
+    expect(repliesTo('555')).toEqual([sparErrorText('DIFFERENT_GYMS')])
+    expect(monday.writeCalls()).toBe(0)
+  })
+
+  it('a Resting partner → the v1 text and no write', async () => {
+    const { linkedChat, say, repliesTo, monday } = await setup()
+    await linkedChat()
+    await say('555', '/train squirtle wartortle')
+    expect(repliesTo('555')).toEqual([sparErrorText('RESTING', ['Wartortle'])])
+    expect(monday.writeCalls()).toBe(0)
+  })
+
+  it('a 0-energy partner → the v1 text and no write', async () => {
+    const { linkedChat, say, repliesTo, monday } = await setup()
+    await linkedChat()
+    monday.pokemon.get('p2')!.energy = 0
+    await say('555', '/train charmander charmeleon')
+    expect(repliesTo('555')).toEqual([sparErrorText('NO_ENERGY', ['Charmeleon'])])
+    expect(monday.writeCalls()).toBe(0)
+  })
+
+  it('validates the values read just before writing, not the ones the names were matched on', async () => {
+    const { linkedChat, say, repliesTo, monday } = await setup()
+    await linkedChat()
+    // Someone sets Charmeleon to Resting in monday between the name lookup and the check
+    let reads = 0
+    const realRequest = monday.request
+    monday.request = (async (query: string, variables?: Record<string, unknown>) => {
+      if (query.includes('items(ids: $itemIds') && ++reads === 1) monday.pokemon.get('p2')!.status = 'Resting'
+      return realRequest(query, variables)
+    }) as typeof monday.request
+    await say('555', '/train charmander charmeleon')
+    expect(repliesTo('555')).toEqual([sparErrorText('RESTING', ['Charmeleon'])])
+  })
+
+  it('one arg → usage; an unknown name → unknownPokemon', async () => {
+    const { linkedChat, say, repliesTo } = await setup()
+    await linkedChat()
+    await say('555', '/train charmander')
+    await say('555', '/train charmander mewtwo')
+    expect(repliesTo('555')).toEqual([texts.usage('/train <pokemon> <partner>'), texts.unknownPokemon('mewtwo')])
+  })
+
+  it('a duplicate update_id for /train applies once', async () => {
+    const { linkedChat, say, monday } = await setup()
+    await linkedChat()
+    await say('555', '/train charmander charmeleon', { updateId: 42 })
+    await say('555', '/train charmander charmeleon', { updateId: 42 })
+    expect(monday.pokemon.get('p1')).toMatchObject({ level: 6, energy: 2 })
+    expect(monday.writeCalls()).toBe(1)
+  })
+})
+
+describe('/rest', () => {
+  it('on Resting → energy 3, status by level', async () => {
+    const { linkedChat, say, repliesTo, monday } = await setup()
+    await linkedChat()
+    await say('555', '/rest wartortle')
+    expect(monday.pokemon.get('p4')).toMatchObject({ energy: 3, status: 'Ready' }) // Lv 16 ≥ 5
+    expect(repliesTo('555')).toEqual([texts.rested(monday.pokemon.get('p4')!)])
+  })
+
+  it('on Ready → cantRest and no write', async () => {
+    const { linkedChat, say, repliesTo, monday } = await setup()
+    await linkedChat()
+    await say('555', '/rest charmander')
+    expect(repliesTo('555')).toEqual([texts.cantRest('Charmander', 'Ready')])
+    expect(monday.writeCalls()).toBe(0)
+  })
+
+  it('without args → usage', async () => {
+    const { linkedChat, say, repliesTo } = await setup()
+    await linkedChat()
+    await say('555', '/rest')
+    expect(repliesTo('555')).toEqual([texts.usage('/rest <pokemon>')])
   })
 })

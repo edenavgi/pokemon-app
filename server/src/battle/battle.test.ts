@@ -47,6 +47,7 @@ async function setup({ connect = true, boards = true } = {}) {
   const pokeApi = {
     getMoveset: vi.fn(async (dex: number) => MOVES[dex] ?? []),
     getTypeChart: vi.fn(async () => TYPE_CHART),
+    getEvolution: vi.fn(async () => { throw new Error('not used in battles') }),
   }
   const app = createApp({
     config, logger: log.logger, now, repos,
