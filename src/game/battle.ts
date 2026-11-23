@@ -1,5 +1,6 @@
 import type { Effectiveness, Gym, PokeType, Pokemon, TypeChart } from '../api/GameApi'
-import { LUCK_MAX, LUCK_MIN, MAX_ROSTER } from './constants'
+import { eligibleFighters } from './arena'
+import { LUCK_MAX, LUCK_MIN } from './constants'
 import type { Rng } from './rng'
 
 export interface Round {
@@ -38,9 +39,8 @@ export function roundScore(a: Pokemon, d: Pokemon, chart: TypeChart, r: number):
   return (a.attack + a.speed + a.hp) * (1 + a.level / 10) * effectiveness(a.types, d.types, chart) * luck
 }
 
-export function eligibleFighters(g: Gym): Pokemon[] {
-  return g.roster.filter((p) => p.status === 'Ready' && p.energy >= 1).slice(0, MAX_ROSTER)
-}
+// Moved to the Arena engine (Phase 2); re-exported here until the v1 Arena is replaced (Task 8).
+export { eligibleFighters }
 
 export function battle(gymA: Gym, gymB: Gym, chart: TypeChart, rng: Rng): BattleResult {
   if (gymA.id === gymB.id) return { ok: false, error: 'SAME_GYM' }

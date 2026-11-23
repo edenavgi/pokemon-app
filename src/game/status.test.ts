@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allowedTransitions, applyRest, applySpar, deriveStatus, validateSpar } from './status'
+import { allowedTransitions, applyBattleFatigue, applyRegen, applyRest, applySpar, deriveStatus, validateSpar } from './status'
 import { makePokemon } from './testUtils'
 
 describe('deriveStatus', () => {
@@ -88,5 +88,29 @@ describe('allowedTransitions', () => {
   })
   it('Resting -> none, can rest', () => {
     expect(allowedTransitions(makePokemon({ status: 'Resting' }))).toEqual({ to: [], canRest: true })
+  })
+})
+
+describe('applyBattleFatigue', () => {
+  it('1 → 0 is Resting; 3 → 2 keeps Ready', () => {
+    expect(applyBattleFatigue(makePokemon({ energy: 1, status: 'Ready', level: 6 }))).toEqual({ energy: 0, status: 'Resting' })
+    expect(applyBattleFatigue(makePokemon({ energy: 3, status: 'Ready', level: 6 }))).toEqual({ energy: 2, status: 'Ready' })
+  })
+  it('never goes below 0', () => {
+    expect(applyBattleFatigue(makePokemon({ energy: 0, status: 'Resting' }))).toEqual({ energy: 0, status: 'Resting' })
+  })
+})
+
+describe('applyRegen', () => {
+  it('full energy → nothing to do', () => {
+    expect(applyRegen(makePokemon({ energy: 3 }))).toBeNull()
+  })
+  it('Resting reaching full → Ready at level ≥ 5, Training below (the v1 rule, Eden 2026-11-23)', () => {
+    expect(applyRegen(makePokemon({ energy: 2, status: 'Resting', level: 5 }))).toEqual({ energy: 3, status: 'Ready' })
+    expect(applyRegen(makePokemon({ energy: 2, status: 'Resting', level: 3 }))).toEqual({ energy: 3, status: 'Training' })
+  })
+  it('below full: +1 and the status stays', () => {
+    expect(applyRegen(makePokemon({ energy: 1, status: 'Training' }))).toEqual({ energy: 2 })
+    expect(applyRegen(makePokemon({ energy: 0, status: 'Resting' }))).toEqual({ energy: 1 })
   })
 })
