@@ -36,7 +36,7 @@ export interface Deps {
   /** monday GraphQL as this user, with their stored OAuth token */
   mondayFor: (userId: Id) => GqlRequest
   /** PokéAPI for work done for this user (Task 13 caches it in their key-value Storage) */
-  pokeApiFor: (userId: Id) => Pick<PokeApi, 'getMoveset' | 'getTypeChart' | 'getEvolution'>
+  pokeApiFor: (userId: Id) => Pick<PokeApi, 'getMoveset' | 'getTypeChart' | 'getEvolution' | 'getSpecies'>
   queue: QueuePort
   /** The Telegram Bot API (@eden_gym_bot) */
   telegram: TelegramPort

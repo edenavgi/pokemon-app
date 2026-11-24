@@ -25,7 +25,7 @@ async function setup() {
   const tokens = new TokenStore(fakeSecureStorage(), oauth, now)
   const app = createApp({
     config, logger: log.logger, now, repos, tokens, oauth, mondayWithToken: () => unused,
-    mondayFor: () => unused, pokeApiFor: () => ({ getMoveset: unused, getTypeChart: unused, getEvolution: unused }), queue: fakeQueue(), telegram: fakeTelegram(),
+    mondayFor: () => unused, pokeApiFor: () => ({ getMoveset: unused, getTypeChart: unused, getEvolution: unused, getSpecies: unused }), queue: fakeQueue(), telegram: fakeTelegram(),
   })
   return { app, repos, database, ...log }
 }

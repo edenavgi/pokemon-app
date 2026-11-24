@@ -95,6 +95,7 @@ mutation ($prompt: String!, $config: RunPromptConfigInput) {
 - The reply is at `res.data.data.run_prompt.content` (the same SeamlessApiClient envelope as §3).
 - Needs a scope from the AI group (`ai:consume` in the Developer Center list) — covered by checking all scopes during development.
 - On failure `talk` logs `[talk] run_prompt failed` with `response.errors` and rethrows; the Talk panel shows the friendly fallback.
+- **From the server (Phase 2, Task 12, 2026-11-24):** `run_prompt` also works with the user's **OAuth token** (ApiClient, API `2026-10`), not only with the iframe's seamless auth. Checked live: `/talk charmander` in Telegram got a reply from the cloud draft.
 
 ## 6. PokéAPI (`getSpecies`)
 - Two calls per species, in parallel: `pokemon/{n}` (types, stats, sprite) and `pokemon-species/{n}` (display name, flavor text).
