@@ -8,6 +8,7 @@ import { createApp } from '../src/app'
 import { OAuthError } from '../src/auth/oauth'
 import { TokenStore } from '../src/auth/tokenStore'
 import type { Database } from '../src/db/mongo'
+import type { Deps } from '../src/deps'
 import { createRepos } from '../src/db/repos'
 import { fakeAccessToken, fakeLogger, fakeSecureStorage, signSessionToken, testConfig, testDb } from './fakes'
 import { fakeMonday, fakeQueue } from './fakeMonday'
@@ -29,7 +30,8 @@ afterEach(async () => {
   open = []
 })
 
-export async function telegramSetup() {
+/** `pokeApiFor` replaces the fixture PokéAPI (Task 13 runs the real loaders over a fake fetch + cache). */
+export async function telegramSetup(opts: { pokeApiFor?: () => ReturnType<Deps['pokeApiFor']> } = {}) {
   const log = fakeLogger()
   const database = await testDb()
   open.push(database)
@@ -84,7 +86,7 @@ export async function telegramSetup() {
   const deps = {
     config, logger: log.logger, now, repos, tokens, oauth,
     mondayWithToken: () => unused, mondayFor,
-    pokeApiFor: () => ({ getMoveset: unused, getTypeChart: unused, getEvolution: async (dex: number) => EVOLUTIONS[dex], getSpecies }),
+    pokeApiFor: opts.pokeApiFor ?? (() => ({ getMoveset: unused, getTypeChart: unused, getEvolution: async (dex: number) => EVOLUTIONS[dex], getSpecies })),
     queue,
     telegram,
   }
