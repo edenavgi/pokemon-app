@@ -3,7 +3,7 @@
 import request from 'supertest'
 import { afterEach, vi } from 'vitest'
 import type { GqlRequest } from '@app/api/boards/gateway'
-import { EVOLUTIONS } from '@app/api/mock/fixtures'
+import { EVOLUTIONS, SPECIES } from '@app/api/mock/fixtures'
 import { createApp } from '../src/app'
 import { OAuthError } from '../src/auth/oauth'
 import { TokenStore } from '../src/auth/tokenStore'
@@ -74,9 +74,17 @@ export async function telegramSetup() {
     setMyCommands: vi.fn(async () => {}),
   }
 
+  let failSpecies = false
+  const getSpecies = async (dex: number) => {
+    if (failSpecies) throw new Error('PokéAPI is down (simulated)')
+    const s = SPECIES.find((x) => x.dexNumber === dex)
+    if (!s) throw new Error(`no species ${dex}`)
+    return s
+  }
   const deps = {
     config, logger: log.logger, now, repos, tokens, oauth,
-    mondayWithToken: () => unused, mondayFor, pokeApiFor: () => ({ getMoveset: unused, getTypeChart: unused, getEvolution: async (dex: number) => EVOLUTIONS[dex] }),
+    mondayWithToken: () => unused, mondayFor,
+    pokeApiFor: () => ({ getMoveset: unused, getTypeChart: unused, getEvolution: async (dex: number) => EVOLUTIONS[dex], getSpecies }),
     queue,
     telegram,
   }
@@ -109,5 +117,7 @@ export async function telegramSetup() {
     app, deps, database, repos, tokens, secure, telegram, sent, meCalls, log, connect, linkCode, say, repliesTo,
     linkedChat, monday, queue, mondayRequests: () => mondayRequests,
     tick: (ms: number) => (t += ms),
+    /** PokéAPI getSpecies fails from now on. */
+    failSpecies: () => void (failSpecies = true),
   }
 }

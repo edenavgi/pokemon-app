@@ -36,6 +36,10 @@ export function fakeMonday() {
   let failWrites = 0
   let failReads = 0
   let writeCalls = 0
+  // monday AI (run_prompt): what was asked, what it answers, and a failure to simulate
+  const prompts: { prompt: string; config: Record<string, unknown> }[] = []
+  let promptReply = 'Char, Charmander!'
+  let failPromptCode: string | undefined
 
   const cv = (title: string, fields: Record<string, unknown>) => ({ text: null, value: null, column: { title }, ...fields })
   const num = (title: string, n: number) => cv(title, { text: String(n), value: JSON.stringify(String(n)) })
@@ -86,6 +90,18 @@ export function fakeMonday() {
     if (!isWrite && failReads > 0) {
       failReads--
       throw new Error('fakeMonday: read failed (simulated)')
+    }
+    if (query.includes('run_prompt')) {
+      if (failPromptCode) {
+        const code = failPromptCode
+        failPromptCode = undefined
+        // shaped like graphql-request's ClientError
+        throw Object.assign(new Error(`fakeMonday: run_prompt failed (${code})`), {
+          response: { status: 200, errors: [{ message: 'run_prompt failed', extensions: { code } }] },
+        })
+      }
+      prompts.push({ prompt: String(variables.prompt), config: variables.config as Record<string, unknown> })
+      return answer({ run_prompt: { content: promptReply } })
     }
     if (query.includes('create_update')) {
       updates.push({ itemId: String(variables.itemId), body: String(variables.body) })
@@ -144,6 +160,16 @@ export function fakeMonday() {
     },
     /** How many column-write requests were made (one request can change many items). */
     writeCalls: () => writeCalls,
+    /** run_prompt calls received (prompt = the user text, config incl. system_prompt). */
+    prompts,
+    /** What run_prompt answers from now on. */
+    setPromptReply(text: string) {
+      promptReply = text
+    },
+    /** The next run_prompt fails with this GraphQL error code. */
+    failNextPrompt(code: string) {
+      failPromptCode = code
+    },
     /** The next `n` reads (queries) fail, like monday being down. */
     failNextReads(n = 1) {
       failReads = n

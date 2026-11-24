@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { sparErrorText } from '@app/lib/messages'
+import { SPECIES } from '@app/api/mock/fixtures'
+import { buildTalkPrompt } from '@app/game/talk'
+import { sparErrorText, talkFallbackText } from '@app/lib/messages'
 import { telegramSetup as setup } from '../../test/telegramHarness'
 import { BOT_COMMANDS, helpText } from './commands'
 import { texts } from './texts'
@@ -71,8 +73,8 @@ describe('the command router', () => {
     for (const c of BOT_COMMANDS) expect(helpText()).toContain(`/${c.command}`)
   })
 
-  it('BOT_COMMANDS (the Telegram menu) has gyms, roster, train, rest and help, in Telegram\'s format', () => {
-    expect(BOT_COMMANDS.map((c) => c.command)).toEqual(['gyms', 'roster', 'train', 'rest', 'help'])
+  it('BOT_COMMANDS (the Telegram menu) has gyms, roster, train, rest, talk and help, in Telegram\'s format', () => {
+    expect(BOT_COMMANDS.map((c) => c.command)).toEqual(['gyms', 'roster', 'train', 'rest', 'talk', 'help'])
     for (const c of BOT_COMMANDS) {
       expect(c.command).toMatch(/^[a-z0-9_]{1,32}$/)
       expect(c.description.length).toBeGreaterThanOrEqual(1)
@@ -231,5 +233,55 @@ describe('/rest', () => {
     await linkedChat()
     await say('555', '/rest')
     expect(repliesTo('555')).toEqual([texts.usage('/rest <pokemon>')])
+  })
+})
+
+describe('/talk', () => {
+  const charmander = SPECIES.find((s) => s.dexNumber === 4)!
+
+  it('sends the buildTalkPrompt system prompt and user text to run_prompt with the v1 settings', async () => {
+    const { linkedChat, say, monday } = await setup()
+    await linkedChat()
+    await say('555', '/talk charmander')
+    const { system, user } = buildTalkPrompt(charmander)
+    expect(monday.prompts).toEqual([{
+      prompt: user,
+      config: { model: 'MONDAY_FAST', system_prompt: system, temperature: 0.8, max_tokens: 60 },
+    }])
+  })
+
+  it('the reply goes back to the chat as "<name>: <reply>"', async () => {
+    const { linkedChat, say, repliesTo, monday } = await setup()
+    await linkedChat()
+    monday.setPromptReply('Char! Charmander, Char!')
+    await say('555', '/talk charmander')
+    expect(repliesTo('555')).toEqual(['Charmander: Char! Charmander, Char!'])
+  })
+
+  it('run_prompt failure → the fallback text, and the error code is on the event', async () => {
+    const { linkedChat, say, repliesTo, monday, log } = await setup()
+    await linkedChat()
+    monday.failNextPrompt('USER_UNAUTHORIZED')
+    await say('555', '/talk charmander')
+    expect(repliesTo('555')).toEqual([talkFallbackText('Charmander')])
+    expect(log.events().find((e) => e.path === '/telegram/webhook')).toMatchObject({ command: '/talk', talkFailed: 'USER_UNAUTHORIZED' })
+  })
+
+  it('PokéAPI failure → the fallback text too, and no run_prompt call', async () => {
+    const { linkedChat, say, repliesTo, monday, failSpecies } = await setup()
+    await linkedChat()
+    failSpecies()
+    await say('555', '/talk charmander')
+    expect(repliesTo('555')).toEqual([talkFallbackText('Charmander')])
+    expect(monday.prompts).toEqual([])
+  })
+
+  it('without args → usage; an unknown name → unknownPokemon, and no run_prompt call', async () => {
+    const { linkedChat, say, repliesTo, monday } = await setup()
+    await linkedChat()
+    await say('555', '/talk')
+    await say('555', '/talk mewtwo')
+    expect(repliesTo('555')).toEqual([texts.usage('/talk <pokemon>'), texts.unknownPokemon('mewtwo')])
+    expect(monday.prompts).toEqual([])
   })
 })

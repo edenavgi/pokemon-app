@@ -6,7 +6,8 @@ import type { BoardConfig, Id, Pokemon } from '@app/api/GameApi'
 import { MAX_ENERGY } from '@app/game/constants'
 import { evolutionCheck } from '@app/game/evolution'
 import { allowedTransitions, applyRest, applySpar, validateSpar } from '@app/game/status'
-import { sparErrorText } from '@app/lib/messages'
+import { buildTalkPrompt } from '@app/game/talk'
+import { sparErrorText, talkFallbackText } from '@app/lib/messages'
 import type { Deps } from '../deps'
 import { currentEvent } from '../log/wideEvent'
 import { matchGym, matchPokemon } from './args'
@@ -29,6 +30,7 @@ export const BOT_COMMANDS: { command: string; description: string }[] = [
   { command: 'roster', description: 'Show a gym\'s Pokémon: /roster <gym>' },
   { command: 'train', description: 'Spar two Pokémon of one gym: /train <pokemon> <partner>' },
   { command: 'rest', description: 'Refill a Resting Pokémon\'s energy: /rest <pokemon>' },
+  { command: 'talk', description: 'Say hi to a Pokémon: /talk <pokemon>' },
   { command: 'help', description: 'What the bot can do' },
 ]
 
@@ -63,6 +65,13 @@ async function evolveHint(ctx: CommandCtx, p: Pokemon): Promise<string | undefin
     currentEvent()?.set({ evolutionLookupFailed: err instanceof Error ? err.message : String(err) })
     return undefined
   }
+}
+
+/** The GraphQL error code (graphql-request's ClientError), else the message. For the event only. */
+function errorCode(err: unknown): string {
+  const code = (err as { response?: { errors?: { extensions?: { code?: unknown } }[] } })?.response?.errors?.[0]?.extensions?.code
+  if (code != null) return String(code)
+  return err instanceof Error ? err.message : String(err)
 }
 
 export const COMMANDS: Record<string, CommandHandler> = {
@@ -109,6 +118,26 @@ export const COMMANDS: Record<string, CommandHandler> = {
     const patch = applyRest(p)
     await ctx.gateway.updatePokemon([{ id: p.id, patch }])
     return texts.rested({ ...p, ...patch })
+  },
+
+  /**
+   * The v1 Talk button, from Telegram: the same prompt (buildTalkPrompt) and the same run_prompt
+   * settings (the shared gateway), but with the user's OAuth token instead of the iframe's
+   * seamless auth. Any failure before the reply → the Pokémon is "napping", and the cause goes on the event.
+   */
+  async talk(ctx, args) {
+    if (args.length === 0) return texts.usage('/talk <pokemon>')
+    const match = matchPokemon(args.join(' '), await listPokemon(ctx))
+    if (!match.ok) return match.reply
+    const { p } = match
+    try {
+      const species = await ctx.pokeApi.getSpecies(p.dexNumber)
+      const reply = await ctx.gateway.runPrompt(buildTalkPrompt(species))
+      return `${p.name}: ${reply.trim()}`
+    } catch (err) {
+      currentEvent()?.set({ talkFailed: errorCode(err) })
+      return talkFallbackText(p.name)
+    }
   },
 
   async help() {
