@@ -262,3 +262,10 @@ Tested on the deployed draft version: Gym HQ → Connect → Connect Telegram, w
   - Sending `/start <code>` to the bot by hand, from the phone or Telegram Web, does the same thing. Eden decided not to add a QR code or a copyable code to the Connect tab.
 - The code (43 chars of base64url) fits Telegram's 64-char `start` parameter.
 - The link code is single use and lives 10 minutes, so a code seen in the address bar, a screenshot or chat history is useless once it is used or expired.
+
+## 19. Key-value Storage as the PokéAPI cache (Phase 2, Task 13, 2026-11-24)
+- `new Storage(accessToken)` from `@mondaycom/apps-sdk` with the user's OAuth token works on monday code: `get` answers `{ success: true, value, version }`, and a missing key answers `value: null`.
+- **Storage keeps strings.** An object passed to `set` comes back from `get` as the string `"[object Object]"` (`typeof value === 'string'`), with `success: true` and no error. So a cache that stores objects silently never hits. Store `JSON.stringify(...)` and `JSON.parse` on read.
+- `set` takes `{ ttl }` in seconds; we use 30 days (2,592,000), the maximum.
+- The server stores `{ v: value }` as JSON, so a cached `null` (a status move) is told apart from a missing key.
+- Every wide event that touched the cache has `cache: { hits, misses }` and `cacheKeys` (up to 20). Storage errors become misses and show as `cacheErrors` / `cacheError`.

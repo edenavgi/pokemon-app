@@ -1,20 +1,21 @@
-import { Logger, Queue, SecureStorage } from '@mondaycom/apps-sdk'
+import { Logger, Queue, SecureStorage, Storage } from '@mondaycom/apps-sdk'
 import type { GqlRequest } from '@app/api/boards/gateway'
 import type { Id } from '@app/api/GameApi'
-import { createPokeApi, fetchPokeApi, memoryPokeCache, type PokeApi } from '@app/api/pokeapi/loaders'
+import { createPokeApi, fetchPokeApi, type PokeApi } from '@app/api/pokeapi/loaders'
 import { createMondayOAuth, type OAuthPort } from './auth/oauth'
 import { TokenStore } from './auth/tokenStore'
 import { mondayRequest, mondayRequestFor } from './monday/client'
 import { loadConfig, type Config } from './config'
 import { connectDb, ensureIndexes, type Database } from './db/mongo'
 import { createRepos, type Repos } from './db/repos'
+import { KvCache, type KvPort } from './pokeapi/cache'
 import type { LoggerPort } from './log/wideEvent'
 import { createTelegramApi, type TelegramPort } from './telegram/api'
 
 /**
  * Everything the app needs from the outside world. Routes receive it instead of
  * creating SDK clients themselves, so tests can pass fakes.
- * Later tasks add: kv, objectStorage.
+ * Later tasks add: objectStorage.
  */
 
 /** The part of the SDK Queue we use (monday code: Google Pub/Sub; locally: a POST to ourselves). */
@@ -35,7 +36,7 @@ export interface Deps {
   mondayWithToken: (accessToken: string) => GqlRequest
   /** monday GraphQL as this user, with their stored OAuth token */
   mondayFor: (userId: Id) => GqlRequest
-  /** PokéAPI for work done for this user (Task 13 caches it in their key-value Storage) */
+  /** PokéAPI for work done for this user, cached in the account's key-value Storage (with their token) */
   pokeApiFor: (userId: Id) => Pick<PokeApi, 'getMoveset' | 'getTypeChart' | 'getEvolution' | 'getSpecies'>
   queue: QueuePort
   /** The Telegram Bot API (@eden_gym_bot) */
@@ -63,12 +64,17 @@ export async function createRealDeps(logger: LoggerPort = new Logger(LOGGER_TAG)
   )
   const mondayWithToken = (accessToken: string) => mondayRequest(async () => accessToken)
   const mondayFor = (userId: Id) => mondayRequestFor(tokens, userId)
-  const pokeApi = createPokeApi(fetchPokeApi, memoryPokeCache()) // per process until Task 13
+  // Storage takes the user's OAuth token; it's read on each call, so a refreshed token is picked up
+  const storageFor = (userId: Id): KvPort => ({
+    get: async (key) => new Storage(await tokens.getAccessToken(userId)).get(key),
+    set: async (key, value, opts) => new Storage(await tokens.getAccessToken(userId)).set(key, value, opts),
+  })
+  const pokeApiFor = (userId: Id) => createPokeApi(fetchPokeApi, new KvCache(storageFor(userId)))
   const queue = new Queue()
   return {
     deps: {
       config, logger, now, repos: createRepos(database.db, now), tokens, oauth, mondayWithToken,
-      mondayFor, pokeApiFor: () => pokeApi, queue, telegram: createTelegramApi(config.telegramBotToken),
+      mondayFor, pokeApiFor, queue, telegram: createTelegramApi(config.telegramBotToken),
     },
     database,
   }
