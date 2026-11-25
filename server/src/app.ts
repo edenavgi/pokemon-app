@@ -4,6 +4,7 @@ import pkg from '../package.json' with { type: 'json' }
 import { meRoutes } from './api/me'
 import { oauthCallback, oauthStart } from './auth/oauth'
 import { battleRoutes, queueRoute } from './battle/routes'
+import { energyRegenRoute } from './cron/energyRegen'
 import { requireSession } from './auth/sessionToken'
 import type { Deps } from './deps'
 import { errorHandler, wideEventMiddleware } from './log/middleware'
@@ -46,6 +47,9 @@ export function createApp(deps: Deps): Express {
 
   // monday code's Queue delivers our messages here (checked with the queue secret, not a sessionToken)
   app.post('/mndy-queue', ...queueRoute(deps))
+
+  // monday code's scheduler calls this every hour (live version only). Open: the hour marks cap it at +1/hour.
+  app.post('/mndy-cronjob/energy-regen', energyRegenRoute(deps))
 
   // Telegram delivers the bot's messages here (checked with the webhook secret header)
   app.post('/telegram/webhook', ...telegramWebhook(deps))

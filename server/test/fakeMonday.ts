@@ -15,7 +15,8 @@ const NUMBER_FIELDS: Record<string, keyof Pokemon> = {
   'Pokédex number': 'dexNumber', HP: 'hp', Attack: 'attack', Defense: 'defense', Speed: 'speed', Level: 'level', Energy: 'energy',
 }
 
-export function fakeMonday() {
+/** `boards` lets two fakes stand for two different boards (e.g. two users in the cron tests). */
+export function fakeMonday({ gymsBoard = GYMS_BOARD, pokemonBoard = POKEMON_BOARD } = {}) {
   const gyms = new Map<string, Omit<Gym, 'roster' | 'mirroredLevels'>>(
     SEED_GYMS.map((g) => [g.id, { id: g.id, name: g.name, type: g.type }]),
   )
@@ -123,7 +124,7 @@ export function fakeMonday() {
     if (query.includes('board { id columns')) {
       const ids = (variables.itemIds as string[]) ?? []
       const columns = POKEMON_COLUMNS.map((title) => ({ id: colId(title), title }))
-      return answer({ items: ids.filter((id) => pokemon.has(id)).map((id) => ({ id, board: { id: POKEMON_BOARD, columns } })) })
+      return answer({ items: ids.filter((id) => pokemon.has(id)).map((id) => ({ id, board: { id: pokemonBoard, columns } })) })
     }
     if (query.includes('items_page')) {
       const boardIds = (variables.boardIds as string[]) ?? []
@@ -131,7 +132,7 @@ export function fakeMonday() {
         boards: boardIds.map((b) => ({
           items_page: {
             cursor: null,
-            items: b === GYMS_BOARD ? [...gyms.values()].map(gymItem) : b === POKEMON_BOARD ? [...pokemon.values()].map(pokemonItem) : [],
+            items: b === gymsBoard ? [...gyms.values()].map(gymItem) : b === pokemonBoard ? [...pokemon.values()].map(pokemonItem) : [],
           },
         })),
       })
@@ -153,7 +154,7 @@ export function fakeMonday() {
     pokemon,
     updates,
     writes,
-    boards: { gymsBoardId: GYMS_BOARD, pokemonBoardId: POKEMON_BOARD },
+    boards: { gymsBoardId: gymsBoard, pokemonBoardId: pokemonBoard },
     /** The next `n` column writes fail, like a monday error mid-way. */
     failNextWrites(n = 1) {
       failWrites = n

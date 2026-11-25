@@ -269,3 +269,14 @@ Tested on the deployed draft version: Gym HQ → Connect → Connect Telegram, w
 - `set` takes `{ ttl }` in seconds; we use 30 days (2,592,000), the maximum.
 - The server stores `{ v: value }` as JSON, so a cached `null` (a status move) is told apart from a missing key.
 - Every wide event that touched the cache has `cache: { hits, misses }` and `cacheKeys` (up to 20). Storage errors become misses and show as `cacheErrors` / `cacheError`.
+
+## 20. The scheduler and the live version (Phase 2, Task 14, 2026-11-25)
+- `mapps app:promote` turned version 20263892 live. `mapps code:status --appVersionId 20263892` then shows two URLs: `url` (the version's own, `https://db207-service-…`, still serving) and **`liveUrl`** (`https://live1-service-…`). The scheduler calls the live deployment.
+- `--region` is refused for this app ("Region parameter is not allowed for this app"): it only applies to multi-region apps. Leave it out.
+- `scheduler:create` **prompts** for `--minBackoffDuration` even though it is optional. Pass it (we use 60 s), or the command waits for input.
+- `scheduler:run` before the job exists fails with `404 … monday-code deployment not found for the requested app` (misleading: the job was missing).
+- Job: `energy-regen`, `"0 * * * *"` (UTC), `--maxRetries 2 --minBackoffDuration 60 --timeout 240`, target `/mndy-cronjob/energy-regen` (POST).
+- The scheduler is **Google Cloud Scheduler**. Header names on the request: `accept-encoding`, `authorization`, `content-length`, `forwarded`, `host`, `traceparent`, `user-agent`, `x-cloud-trace-context`, `x-cloudscheduler`, `x-cloudscheduler-jobname`, `x-cloudscheduler-scheduletime`, `x-forwarded-for`, `x-forwarded-proto`.
+- First run (`scheduler:run`): cron event `hourKey 2026-11-25T07`, `users 1, boards 1, changed 3, skipped 0, failures []`, `mondayCalls 3`, about 4 s. The board got +1 on the three Pokémon below full.
+- A new draft version gets its own URL: v2 (20745511) → `https://e5bfb-service-…`. So the bot webhook, the OAuth redirect URL, `SERVER_BASE_URL` and the CI `SERVER_URL` name one specific version's server.
+- **Open:** the route is open (the hour marks cap it at +1 per board per hour). The `authorization` header is likely a Google OIDC token; checking it would lock the route.
