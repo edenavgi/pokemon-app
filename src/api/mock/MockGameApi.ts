@@ -25,7 +25,7 @@ export class MockGameApi implements GameApi {
   notices: { message: string; type: NoticeType }[] = []
   updates: { itemId: Id; body: string }[] = []
   /** The fake server's view of the user; tests change it to simulate OAuth finishing. */
-  serverStatus: ServerStatus = { connected: false, boardsKnown: false, telegramLinked: false }
+  serverStatus: ServerStatus = { connected: false, connectedAt: null, boardsKnown: false, telegramLinked: false }
   oauthStarts = 0
   telegramLinkStarts = 0
   syncedBoards: BoardConfig[] = []

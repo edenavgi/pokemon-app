@@ -6,12 +6,14 @@ import type { Session } from '../auth/sessionToken'
 export function meRoutes(deps: Pick<Deps, 'repos'>): Router {
   const router = Router()
 
-  // Is this user connected (has gone through OAuth), do we know their boards, is Telegram linked?
+  // Is this user connected (has gone through OAuth) and since when, do we know their boards, is Telegram linked?
   router.get('/', async (_req, res) => {
     const { userId } = res.locals.session as Session
     const [user, link] = await Promise.all([deps.repos.users.get(userId), deps.repos.links.getByUser(userId)])
     res.json({
       connected: user !== null,
+      // The app's Reconnect button waits for this to change (older docs: their first connection)
+      connectedAt: user ? (user.connectedAt ?? user.createdAt).toISOString() : null,
       boardsKnown: Boolean(user?.gymsBoardId && user?.pokemonBoardId),
       telegram: { linked: link !== null },
     })

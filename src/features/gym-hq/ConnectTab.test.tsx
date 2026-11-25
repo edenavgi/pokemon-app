@@ -115,6 +115,46 @@ describe('ConnectTab', () => {
     expect(await screen.findByText(t.connected)).toBeInTheDocument()
   })
 
+  describe('Reconnect to monday', () => {
+    const FIRST = '2026-11-25T10:00:00.000Z'
+
+    it('only when connected: a Reconnect button next to the connected status', async () => {
+      setup({ connected: true, connectedAt: FIRST, boardsKnown: true })
+      expect(await screen.findByRole('button', { name: t.reconnectMonday })).toBeEnabled()
+      expect(screen.getByText(t.reconnectHint)).toBeInTheDocument()
+    })
+
+    it('not connected → no Reconnect button', async () => {
+      setup()
+      await screen.findByRole('button', { name: t.connectMonday })
+      expect(screen.queryByRole('button', { name: t.reconnectMonday })).not.toBeInTheDocument()
+    })
+
+    it('click → startMondayOAuth, then waits until connectedAt changes (connected alone is not enough)', async () => {
+      const { api, status } = setup({ connected: true, connectedAt: FIRST, boardsKnown: true })
+      await userEvent.click(await screen.findByRole('button', { name: t.reconnectMonday }))
+
+      expect(api.oauthStarts).toBe(1)
+      expect(await screen.findByText(t.waiting)).toBeInTheDocument()
+      await waitFor(() => expect(status.mock.calls.length).toBeGreaterThan(3)) // still connected, still waiting
+      expect(screen.getByRole('button', { name: t.reconnectMonday })).toBeDisabled()
+
+      api.serverStatus.connectedAt = '2026-11-25T11:00:00.000Z'
+      expect(await screen.findByText(t.reconnected)).toBeInTheDocument()
+      const calls = status.mock.calls.length
+      await new Promise((r) => setTimeout(r, 80))
+      expect(status.mock.calls.length).toBe(calls) // polling stopped
+      expect(screen.getByRole('button', { name: t.reconnectMonday })).toBeEnabled()
+    })
+
+    it('gives up after the max wait; the button works again', async () => {
+      setup({ connected: true, connectedAt: FIRST, boardsKnown: true })
+      await userEvent.click(await screen.findByRole('button', { name: t.reconnectMonday }))
+      expect(await screen.findByText(t.timedOut, {}, { timeout: 1000 })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: t.reconnectMonday })).toBeEnabled()
+    })
+  })
+
   describe('Connect Telegram', () => {
     it('asks the server for a link, opens it, and waits for the chat to be linked', async () => {
       const { api } = setup({ connected: true, boardsKnown: true })
