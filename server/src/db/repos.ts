@@ -49,6 +49,13 @@ export interface TgUpdateDoc {
 export const TG_UPDATE_KEEP_MS = 24 * 60 * 60 * 1000
 const DUPLICATE_KEY = 11000
 
+/** "This Pokémon board got its +1 Energy for this hour" (Task 14). Kept 48 h. */
+export interface RegenMarkDoc {
+  _id: string // "<pokemonBoardId>:<YYYY-MM-DDTHH>"
+  at: Date
+}
+export const REGEN_MARK_KEEP_MS = 48 * 60 * 60 * 1000
+
 /** One saved turn: the engine's ArenaTurn + which battle it belongs to. */
 export interface TurnDoc extends ArenaTurn {
   _id: string // "<battleId>:<n>" — the same turn always gets the same id, so a re-run overwrites it
@@ -77,6 +84,7 @@ export function createRepos(database: Db, now: () => Date) {
   const tgUpdates = database.collection<TgUpdateDoc>('tg_updates')
   const battles = database.collection<BattleDoc>('battles')
   const battleTurns = database.collection<TurnDoc>('battle_turns')
+  const regenMarks = database.collection<RegenMarkDoc>('regen_marks')
 
   return {
     users: {
@@ -101,6 +109,11 @@ export function createRepos(database: Db, now: () => Date) {
           { $set: { gymsBoardId: cfg.gymsBoardId, pokemonBoardId: cfg.pokemonBoardId, updatedAt: now() } },
         ))
         return res.matchedCount === 1
+      },
+
+      /** Every user who connected and saved boards, one at a time (a cursor, not one big array). */
+      withBoards(): AsyncIterable<UserDoc> {
+        return users.find({ pokemonBoardId: { $exists: true } }).sort({ _id: 1 })
       },
     },
 
@@ -207,6 +220,29 @@ export function createRepos(database: Db, now: () => Date) {
       /** The code if it exists and hasn't expired — deleted in the same step (single use). */
       consume(hash: string): Promise<LinkCodeDoc | null> {
         return db(linkCodes.findOneAndDelete({ _id: hash, expiresAt: { $gt: now() } }))
+      },
+    },
+
+    regenMarks: {
+      /**
+       * true = this board is ours for this hour; false = already done (another user on the same board,
+       * or a scheduler retry). Atomic: the unique _id lets only one insert win. Forgets marks older than 48 h.
+       */
+      async claim(pokemonBoardId: Id, hourKey: string): Promise<boolean> {
+        const at = now()
+        await db(regenMarks.deleteMany({ at: { $lt: new Date(at.getTime() - REGEN_MARK_KEEP_MS) } }))
+        try {
+          await db(regenMarks.insertOne({ _id: `${pokemonBoardId}:${hourKey}`, at }))
+          return true
+        } catch (err) {
+          if ((err as { code?: number }).code === DUPLICATE_KEY) return false
+          throw err
+        }
+      },
+
+      /** Gives the hour back after a failed board write, so a retry within the hour can apply it. */
+      async release(pokemonBoardId: Id, hourKey: string): Promise<void> {
+        await db(regenMarks.deleteOne({ _id: `${pokemonBoardId}:${hourKey}` }))
       },
     },
 
