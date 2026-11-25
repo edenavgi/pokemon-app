@@ -5,7 +5,7 @@ import { OAuthError } from '../auth/oauth'
 import { TokenStore } from '../auth/tokenStore'
 import type { Database } from '../db/mongo'
 import { createRepos } from '../db/repos'
-import { fakeAccessToken, fakeLogger, fakeSecureStorage, fakeTelegram, testConfig, testDb } from '../../test/fakes'
+import { fakeAccessToken, fakeLogger, fakeSecureStorage, fakeCardDeps, fakeTelegram, testConfig, testDb } from '../../test/fakes'
 import { fakeMonday, fakeQueue } from '../../test/fakeMonday'
 import { REGEN_MARK_KEEP_MS } from './energyRegen'
 
@@ -56,7 +56,7 @@ async function setup() {
   const app = createApp({
     config: testConfig(), logger: log.logger, now, repos, tokens, oauth, mondayWithToken: () => unused, mondayFor,
     pokeApiFor: () => ({ getMoveset: unused, getTypeChart: unused, getEvolution: unused, getSpecies: unused }),
-    queue: fakeQueue(), telegram: fakeTelegram(),
+    queue: fakeQueue(), telegram: fakeTelegram(), ...fakeCardDeps(),
   })
   /** What the monday code scheduler does: a POST with no session. */
   const run = () => request(app).post('/mndy-cronjob/energy-regen').set('Content-Type', 'application/json').send({})

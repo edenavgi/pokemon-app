@@ -280,3 +280,17 @@ Tested on the deployed draft version: Gym HQ → Connect → Connect Telegram, w
 - First run (`scheduler:run`): cron event `hourKey 2026-11-25T07`, `users 1, boards 1, changed 3, skipped 0, failures []`, `mondayCalls 3`, about 4 s. The board got +1 on the three Pokémon below full.
 - A new draft version gets its own URL: v2 (20745511) → `https://e5bfb-service-…`. So the bot webhook, the OAuth redirect URL, `SERVER_BASE_URL` and the CI `SERVER_URL` name one specific version's server.
 - **Open:** the route is open (the hour marks cap it at +1 per board per hour). The `authorization` header is likely a Google OIDC token; checking it would lock the route.
+
+## 21. The battle card: satori, resvg-wasm, Object storage and add_file_to_update (Phase 2, Task 16, 2026-11-25)
+- The experiment worked on monday code (draft v2, 20745511): a `/battle` from Telegram got the card as a photo, and the gym's update had the PNG attached. Checked by Eden.
+- **PNG library:** `satori` (layout → SVG) + **`@resvg/resvg-wasm`** (SVG → PNG), Eden's choice over the native `@resvg/resvg-js`. The WebAssembly build needs no platform binary, and it loaded on monday code's buildpack with no extra setup. The `.wasm` file and the font are read from `node_modules` with `createRequire(import.meta.url).resolve(...)`, because esbuild keeps npm packages external.
+- Locally, from the bundle: about 76 ms per card and about 74 MB RSS for the process.
+- **satori gotchas:**
+  - padding is added **outside** `width`/`height` (content-box). The root box must be the card size minus the padding, or the PNG comes out clipped.
+  - satori reads `.woff`, not `.woff2`.
+  - every `div` with more than one child needs `display: flex`.
+  - a glyph missing from the font (⚔ in Inter latin) draws as a box.
+- **Object storage:** it worked on the draft with no Developer Center step, so `OBJECT_STORAGE_BUCKET` was already set. Note that the SDK's `new ObjectStorage()` **throws** when `OBJECT_STORAGE_BUCKET` is missing (for example locally), so we create it on first use.
+- **`add_file_to_update`** works with the user's OAuth token. It goes over `POST https://api.monday.com/v2/file` as `multipart/form-data`: the mutation in `query` (`mutation ($file: File!) { add_file_to_update(update_id: <id>, file: $file) { id } }`) and the file in `variables[file]`. The JSON GraphQL client (`ApiClient`) can't send files.
+- **Telegram `sendPhoto`:** multipart upload of the PNG with the summary as `caption`, which is limited to 1024 characters.
+- Since Task 16 the battle update is posted on **both** gyms, winner and loser (Eden's decision). The card is attached to each update.
