@@ -44,6 +44,7 @@ export type NoticeType = 'success' | 'error' | 'info'
 /** What the server (Phase 2) knows about the current user. */
 export interface ServerStatus {
   connected: boolean // went through OAuth: the server has its own token for this user
+  connectedAt: string | null // ISO time of the last OAuth connection; Reconnect waits for it to change
   boardsKnown: boolean // the server knows the user's Gyms and Pokémon boards
   telegramLinked: boolean
 }

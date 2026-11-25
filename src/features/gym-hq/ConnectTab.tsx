@@ -11,9 +11,16 @@ export const CONNECT_POLL_MS = 2000
 /** …for at most 2 minutes. */
 export const CONNECT_MAX_WAIT_MS = 120_000
 
-/** What the tab can be waiting for: the OAuth callback, or /start in Telegram. */
-type Target = 'monday' | 'telegram'
-const reached = (s: ServerStatus, target: Target) => (target === 'monday' ? s.connected : s.telegramLinked)
+/**
+ * What the tab can be waiting for: the OAuth callback, a NEW OAuth callback (reconnect: connectedAt
+ * changes from the value it had when the button was pressed), or /start in Telegram.
+ */
+type Target = 'monday' | 'reconnect' | 'telegram'
+function reached(s: ServerStatus, target: Target, connectedBefore: string | null): boolean {
+  if (target === 'monday') return s.connected
+  if (target === 'reconnect') return s.connected && s.connectedAt !== connectedBefore
+  return s.telegramLinked
+}
 
 export function ConnectTab({
   cfg,
@@ -32,7 +39,12 @@ export function ConnectTab({
   const [waiting, setWaiting] = useState<Target>() // the link is open in another tab; polling
   const [timedOut, setTimedOut] = useState<Target>() // stopped polling; focus still checks
   const [problem, setProblem] = useState<{ target: Target; text: string }>()
+  const [reconnected, setReconnected] = useState(false)
+  const connectedBefore = useRef<string | null>(null) // connectedAt when Reconnect was pressed
   const current = status ?? loaded
+  const arrived = (target: Target) => {
+    if (target === 'reconnect') setReconnected(true)
+  }
 
   // Poll while the user acts in the other tab; stop when it worked or after the max wait.
   useEffect(() => {
@@ -51,10 +63,11 @@ export function ConnectTab({
         const next = await api.getServerStatus()
         if (stopped) return
         setStatus(next)
-        if (reached(next, waiting)) {
+        if (reached(next, waiting, connectedBefore.current)) {
           stopped = true
           clearInterval(timer)
           setWaiting(undefined)
+          arrived(waiting)
         }
       } catch {
         // a missed poll is not an error worth showing; the next one tries again
@@ -78,9 +91,10 @@ export function ConnectTab({
         const next = await api.getServerStatus()
         if (!active) return
         setStatus(next)
-        if (reached(next, watching)) {
+        if (reached(next, watching, connectedBefore.current)) {
           setWaiting(undefined)
           setTimedOut(undefined)
+          arrived(watching)
         }
       } catch {
         // the next poll or focus tries again
@@ -115,8 +129,12 @@ export function ConnectTab({
     setProblem(undefined)
     setTimedOut(undefined)
     setStarting(target)
+    if (target === 'reconnect') {
+      connectedBefore.current = current.connectedAt
+      setReconnected(false)
+    }
     try {
-      await (target === 'monday' ? api.startMondayOAuth() : api.startTelegramLink())
+      await (target === 'telegram' ? api.startTelegramLink() : api.startMondayOAuth())
       setWaiting(target)
     } catch (e) {
       setProblem({ target, text: e instanceof Error ? e.message : String(e) })
@@ -140,6 +158,14 @@ export function ConnectTab({
           <>
             <p role="status" className="text-sm font-medium">{t.connected}</p>
             <p className="text-sm text-muted-foreground">{current.boardsKnown ? t.boardsSynced : t.syncingBoards}</p>
+            <p className="text-sm text-muted-foreground">{t.reconnectHint}</p>
+            {(note('reconnect', t.waiting, t.timedOut) ?? (reconnected ? t.reconnected : undefined)) && (
+              <p role="status" className="text-sm">{note('reconnect', t.waiting, t.timedOut) ?? t.reconnected}</p>
+            )}
+            <div>
+              <Button variant="outline" onClick={() => begin('reconnect')} disabled={busy('reconnect')}>{t.reconnectMonday}</Button>
+            </div>
+            {alert('reconnect')}
           </>
         ) : (
           <>

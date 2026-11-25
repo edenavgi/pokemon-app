@@ -14,6 +14,8 @@ export interface UserDoc {
   pokemonBoardId?: Id
   createdAt: Date
   updatedAt: Date
+  /** The last OAuth connection (the callback's upsert); a board sync doesn't change it. Older docs lack it. */
+  connectedAt?: Date
 }
 
 /** An OAuth login in progress: single use, 10 minutes. */
@@ -88,12 +90,12 @@ export function createRepos(database: Db, now: () => Date) {
 
   return {
     users: {
-      /** Creates the user, or refreshes accountId/updatedAt. createdAt is set only once. */
+      /** After an OAuth connection: creates the user, or refreshes accountId/connectedAt. createdAt is set only once. */
       async upsert(u: { userId: Id; accountId: Id }): Promise<void> {
         const at = now()
         await db(users.updateOne(
           { _id: u.userId },
-          { $set: { accountId: u.accountId, updatedAt: at }, $setOnInsert: { createdAt: at } },
+          { $set: { accountId: u.accountId, updatedAt: at, connectedAt: at }, $setOnInsert: { createdAt: at } },
           { upsert: true },
         ))
       },

@@ -16,7 +16,8 @@ async function setup() {
   const log = fakeLogger()
   const database = await testDb()
   open.push(database)
-  const now = () => new Date('2026-11-22T10:00:00Z')
+  let t = Date.parse('2026-11-22T10:00:00Z')
+  const now = () => new Date(t)
   const repos = createRepos(database.db, now)
   const unused = async () => {
     throw new Error('not used in this test')
@@ -27,7 +28,7 @@ async function setup() {
     config, logger: log.logger, now, repos, tokens, oauth, mondayWithToken: () => unused,
     mondayFor: () => unused, pokeApiFor: () => ({ getMoveset: unused, getTypeChart: unused, getEvolution: unused, getSpecies: unused }), queue: fakeQueue(), telegram: fakeTelegram(), ...fakeCardDeps(),
   })
-  return { app, repos, database, ...log }
+  return { app, repos, database, tick: (ms: number) => (t += ms), ...log }
 }
 afterEach(async () => {
   await Promise.all(open.map((d) => d.close()))
@@ -101,7 +102,7 @@ describe('GET /api/me', () => {
     const { app } = await setup()
     const res = await request(app).get('/api/me').set(bearer(token()))
     expect(res.status).toBe(200)
-    expect(res.body).toEqual({ connected: false, boardsKnown: false, telegram: { linked: false } })
+    expect(res.body).toEqual({ connected: false, connectedAt: null, boardsKnown: false, telegram: { linked: false } })
   })
 
   it('reports connected, boards and the Telegram link once they exist', async () => {
@@ -111,7 +112,20 @@ describe('GET /api/me', () => {
     await database.db.collection('links').insertOne({ _id: 'chat-1' as never, userId: '101', accountId: '202', linkedAt: new Date() })
 
     const res = await request(app).get('/api/me').set(bearer(token()))
-    expect(res.body).toEqual({ connected: true, boardsKnown: true, telegram: { linked: true } })
+    expect(res.body).toEqual({ connected: true, connectedAt: expect.any(String), boardsKnown: true, telegram: { linked: true } })
+  })
+
+  it('connectedAt changes on a new OAuth connection, not on a board sync (the Reconnect button waits for it)', async () => {
+    const { app, repos, tick } = await setup()
+    await repos.users.upsert({ userId: '101', accountId: '202' })
+    const first = (await request(app).get('/api/me').set(bearer(token()))).body.connectedAt
+    tick(60_000)
+    await repos.users.setBoards('101', { gymsBoardId: 'g', pokemonBoardId: 'p' })
+    expect((await request(app).get('/api/me').set(bearer(token()))).body.connectedAt).toBe(first)
+    tick(60_000)
+    await repos.users.upsert({ userId: '101', accountId: '202' }) // what the OAuth callback does
+    const second = (await request(app).get('/api/me').set(bearer(token()))).body.connectedAt
+    expect(Date.parse(second) - Date.parse(first)).toBe(120_000)
   })
 })
 

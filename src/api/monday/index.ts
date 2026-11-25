@@ -155,8 +155,8 @@ export function createMondayGameApi(): GameApi {
     getTypeChart: () => pokeApi.getTypeChart(),
 
     getServerStatus: async (): Promise<ServerStatus> => {
-      const me = await server.get<{ connected: boolean; boardsKnown: boolean; telegram: { linked: boolean } }>('/api/me')
-      return { connected: me.connected, boardsKnown: me.boardsKnown, telegramLinked: me.telegram.linked }
+      const me = await server.get<{ connected: boolean; connectedAt?: string | null; boardsKnown: boolean; telegram: { linked: boolean } }>('/api/me')
+      return { connected: me.connected, connectedAt: me.connectedAt ?? null, boardsKnown: me.boardsKnown, telegramLinked: me.telegram.linked }
     },
     // The server makes the state + PKCE pair and builds monday's consent URL; the app only opens it.
     // The OAuth token itself never comes back to the app.
