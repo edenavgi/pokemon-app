@@ -49,3 +49,52 @@ For each feature: which monday concept it uses and why. Details of the real data
 | 6.4 Spar / Transfer | Board multi-item menu | `selectedPulsesIds`, `change_multiple_column_values` with aliases, `execute("notice")`, `closeAppFeatureModal` | ✅ works |
 | 6.5 Status & Evolve | Status column (on-click dialog) | column context, writes incl. item `name`, `create_update`, PokéAPI evolution chains | ✅ works |
 | 6.6 Gym HQ | Board view (instead of a custom object) | `create_item` with a Connect write, updates, PokéAPI type lists, storage cache | ✅ works as a board view |
+
+## Phase 2: the server on monday code
+
+Phase 2 moves the battle and every "act for the user while they're away" job to a server on **monday code**. The ideas below are what each part is built on, and why.
+
+### OAuth 2.1 with PKCE (Connect to monday)
+- **What:** the server gets the user's own monday token, so the Telegram bot, the queue and the scheduler can act as that user when nobody has monday open.
+- **Flow:** the app asks the server to start (`POST /api/oauth/start`). The server makes a random `state` (single use, 10 minutes, bound to the user) and a PKCE pair, and returns monday's consent URL. monday redirects to `/oauth/callback`, where the server swaps the code + the PKCE **verifier** for a token, checks with `me()` that the token belongs to the user who started, and saves it in **Secure Storage** keyed by user id.
+- **Why PKCE:** only the verifier's SHA-256 travels in the URL, so a stolen code is useless without the verifier, which never leaves the server.
+- **Why the new flow:** the OAuth 2.1 tokens expire and come with a refresh token. The token store refreshes them by itself, and a refused refresh means "reconnect".
+- **Scopes:** the version's scopes are what the user approves. After trimming them, **Reconnect to monday** gets a token with the new set (`verify-early.md` §22).
+
+### sessionToken (app → server)
+- **What:** every call from the app carries monday's **sessionToken** (`monday.get('sessionToken')`), a JWT signed with the app's **client secret**. The server checks it (HS256) and reads the user and account ids from it.
+- **Why:** the server never trusts an id sent by the browser, and the app never holds a monday token of its own.
+
+### The queue and idempotency (Arena battles)
+- **What:** `POST /api/battles` saves the battle as `queued` and **then** publishes `{battleId}` to the monday code **Queue**, which delivers it to `/mndy-queue`.
+- **Why it's safe to deliver twice:** the queue delivers *at least once*, so every step can repeat:
+  - an atomic **claim** (only one worker moves `queued → running`)
+  - a **snapshot** saved once
+  - a fixed **seed** (the same battle every time)
+  - **absolute** board values ("Energy = 2", never "−1 again")
+  - **flags** for steps already done (board, updates, card, Telegram reply)
+- **Replay:** turns are written to Document DB while the battle runs, so the app replays exactly what happened.
+
+### Wide events (logging)
+- **What:** each request, queue delivery and cron run writes **one** JSON log line with everything about it: `traceId`, user, battle, counts of monday/Telegram calls, cache hits, errors.
+- **Why:** one line per unit of work can be searched and read whole. The same `traceId` follows a battle from the webhook through the queue to the Telegram reply.
+
+### Scheduler (cron)
+- **What:** a monday code scheduler job calls `POST /mndy-cronjob/energy-regen` every hour on the **live** version. It gives +1 Energy to every Pokémon below full on every connected user's board.
+- **Why hour marks:** a `regen_marks` row per board and UTC hour is claimed before writing. A retry or a duplicate delivery in the same hour is skipped, so nobody gets +2.
+
+### Storage on monday code
+- **Key-value Storage:** caches PokéAPI with a 30-day TTL. It stores **strings**, so values are JSON.
+- **Object storage:** holds the battle cards (`cards/<id>.png`).
+- **Secure Storage:** holds OAuth tokens.
+- **Document DB:** holds the game's records (users, links, battles…).
+
+| Phase 2 part | monday code / platform concept |
+|---|---|
+| Connect to monday | OAuth 2.1 + PKCE, Secure Storage, `me` |
+| App → server calls | sessionToken (JWT, client secret) |
+| Arena | Queue (at-least-once), Document DB |
+| Telegram bot | the user's OAuth token, `run_prompt`, Document DB (links, update ids) |
+| PokéAPI cache | key-value Storage with TTL |
+| Energy refill | scheduler, live version |
+| Battle card | Object storage, `/v2/file` (`add_file_to_update`) |

@@ -294,3 +294,29 @@ Tested on the deployed draft version: Gym HQ → Connect → Connect Telegram, w
 - **`add_file_to_update`** works with the user's OAuth token. It goes over `POST https://api.monday.com/v2/file` as `multipart/form-data`: the mutation in `query` (`mutation ($file: File!) { add_file_to_update(update_id: <id>, file: $file) { id } }`) and the file in `variables[file]`. The JSON GraphQL client (`ApiClient`) can't send files.
 - **Telegram `sendPhoto`:** multipart upload of the PNG with the summary as `caption`, which is limited to 1024 characters.
 - Since Task 16 the battle update is posted on **both** gyms, winner and loser (Eden's decision). The card is attached to each update.
+
+## 22. Releasing Phase 2: scopes, liveUrl and versions (Phase 2, Task 17, 2026-11-25)
+- **liveUrl is fixed.** After `app:promote` of v2 (20745511) and then v3 (20757934), `code:status` showed the same `liveUrl`, `https://live1-service-1102328-b5e4eb12.us.monday.app`. It follows whichever version is live, so the bot webhook, the OAuth redirect URL, `SERVER_BASE_URL` and the CI `SERVER_URL` point at it, and a release needs no re-pointing. Each version keeps its own URL as well (v2 `e5bfb-…`).
+- **Scopes are per version**, and a live version is locked, so trim them on the draft before promoting. A **new version copies the scopes** of the one it was created from.
+- **The scope list has two families:**
+  - coarse: `boards:read`, `boards:write`, `updates:write`
+  - granular: `items:read`, `items:create`, `items:update`, `updates:create`…
+  - The API docs list only the coarse ones, and they don't say which family each operation checks. We kept both families for exactly what we use:
+    - `account:read`
+    - `ai:consume`
+    - `boards:read`, `boards:write`
+    - `items:read`, `items:create`, `items:update`, `items:write`
+    - `me:read`
+    - `updates:create`, `updates:write`
+  - Not needed: `assets:*` (`add_file_to_update` worked without it), workspaces, users, docs, any `*:delete`, `boards:create`.
+- **With these 11 scopes, everything worked on the live version.** Tested with a **fresh** token after Reconnect:
+  - app: Gym HQ gyms and Recruit
+  - Telegram: `/gyms`, `/roster`, `/train`, `/rest`, `/talk` (`run_prompt`) and `/battle`
+  - the battle: the card photo, the update with the card on both gyms, the replay in the Arena
+  - the cron: reached v3 with no failures (see below)
+- **The app's own calls use the live version's scopes at once** (seamless auth). The server's stored OAuth token keeps the scopes it was granted with. That's why there is **Reconnect to monday** (Connect tab): it runs OAuth again and waits for `connectedAt` to change.
+- **Promoting changes the live server, not the app's settings.** The app is built with `VITE_SERVER_URL` from the CI variable `SERVER_URL`. Change that variable and rerun Deploy **before** promoting, or the live app keeps calling the old server.
+- **The scheduler follows the promotion.** `scheduler:list` still showed `energy-regen` (`0 * * * *`, target `/energy-regen`). `scheduler:run` reached v3's `/mndy-cronjob/energy-regen`.
+- **One `scheduler:run` arrived twice** within a second. The hour mark let only one of them work (`skipped: 1` on the other), so a duplicate delivery can't give +2.
+- `code:logs --eventSource history` works with `--logsStartDate`/`--logsEndDate` (`MM/DD/YYYY HH:mm`) and `--logSearchFromText ""`. Pipe the output to `grep -i cron` to find the cron events.
+- **Open:** the manual run on 2026-11-25 (hour `T12`) read the board and changed nothing (`changed: 0`), while Pokémon below full were seen on the board afterwards. Either nobody was below full when it ran, or it missed them. The next hourly run was not checked, so this is still open. Check one hourly run against a before/after look at the board.

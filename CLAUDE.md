@@ -14,7 +14,8 @@
   - Merging into `main` needs Eden's approval (squash merge).
   - **Never switch the branch of the main checkout** (`~/Dev/pokemon-app`). Eden's `npm run dev` + tunnel run from it, and switching makes files vanish under the server. To work on another branch, use `git worktree add .superpowers/wt-<name> <branch>`, then remove it when done.
   - **Commit budget (Eden's explicit requirement):** one commit per plan task. Review fix rounds and small corrections are `--fixup` commits, autosquashed into the task commit **before push**. They are never pushed as separate commits. Say this in every subagent dispatch.
-- **Verify before claiming done:** `npx vitest run`, `npm run typecheck`, `npm run build`. For the server (`server/`, Phase 2): `npm --prefix server run check`.
+- **Verify before claiming done:** `npx vitest run`, `npm run typecheck`, `npm run lint`, `npm run build`. For the server (`server/`, Phase 2): `npm --prefix server run check`.
+- **Releasing:** see README "Releasing a version" (liveUrl, promote, next draft, CI `MONDAY_APP_VERSION_ID`).
 - **Phase 2 plan:** `docs/superpowers/plans/2026-11-22-phase-2-server-telegram.md`, executed inline and slowly (explain each step to Eden). Eden picks every library/tool.
 - **Findings about monday's real data shapes** go in `docs/verify-early.md`.
 - **The user (Eden) prefers Hebrew** in conversation. Code, commits and docs are in English.
