@@ -1,16 +1,18 @@
 // The bot's commands. Each handler gets the chat's user (resolveChat) and returns the reply text.
 // Board data is read live from monday on every command: the board is the source of truth and
 // people change it in monday at any time, so a cached copy would answer with stale gyms or levels.
+import { randomUUID } from 'node:crypto'
 import type { BoardGateway } from '@app/api/boards/gateway'
 import type { BoardConfig, Id, Pokemon } from '@app/api/GameApi'
 import { MAX_ENERGY } from '@app/game/constants'
 import { evolutionCheck } from '@app/game/evolution'
 import { allowedTransitions, applyRest, applySpar, validateSpar } from '@app/game/status'
 import { buildTalkPrompt } from '@app/game/talk'
-import { sparErrorText, talkFallbackText } from '@app/lib/messages'
+import { battleErrorText, sparErrorText, talkFallbackText } from '@app/lib/messages'
+import { startBattle, type BattleDeps } from '../battle/service'
 import type { Deps } from '../deps'
 import { currentEvent } from '../log/wideEvent'
-import { matchGym, matchPokemon } from './args'
+import { matchGym, matchPokemon, splitTwoGyms } from './args'
 import { texts } from './texts'
 
 export interface CommandCtx {
@@ -20,7 +22,7 @@ export interface CommandCtx {
   boards: BoardConfig
   gateway: BoardGateway
   pokeApi: ReturnType<Deps['pokeApiFor']>
-  deps: Pick<Deps, 'repos' | 'now' | 'config'>
+  deps: Pick<Deps, 'repos' | 'now' | 'config'> & BattleDeps
 }
 export type CommandHandler = (ctx: CommandCtx, args: string[]) => Promise<string>
 
@@ -31,6 +33,7 @@ export const BOT_COMMANDS: { command: string; description: string }[] = [
   { command: 'train', description: 'Spar two Pokémon of one gym: /train <pokemon> <partner>' },
   { command: 'rest', description: 'Refill a Resting Pokémon\'s energy: /rest <pokemon>' },
   { command: 'talk', description: 'Say hi to a Pokémon: /talk <pokemon>' },
+  { command: 'battle', description: 'Two gyms fight in the Arena: /battle <gym> <gym>' },
   { command: 'help', description: 'What the bot can do' },
 ]
 
@@ -138,6 +141,30 @@ export const COMMANDS: Record<string, CommandHandler> = {
       currentEvent()?.set({ talkFailed: errorCode(err) })
       return talkFallbackText(p.name)
     }
+  },
+
+  /**
+   * The Arena, from Telegram: only finds the two gyms and hands them to the SAME startBattle the app
+   * uses. The queue runs the battle (no battle logic here), and the result comes back to this chat.
+   * The battle keeps this webhook's traceId, so the queue's event continues it.
+   */
+  async battle(ctx, args) {
+    const split = splitTwoGyms(args, await listGyms(ctx))
+    if (!split.ok) return split.reply
+    const result = await startBattle(ctx.deps, {
+      userId: ctx.userId, accountId: ctx.accountId, source: 'telegram', chatId: ctx.chatId,
+      gymAId: split.a.id, gymBId: split.b.id, traceId: currentEvent()?.traceId ?? randomUUID(),
+    })
+    if ('error' in result) {
+      currentEvent()?.set({ battleError: result.error })
+      switch (result.error) {
+        case 'NOT_CONNECTED': return texts.reconnect
+        case 'NO_BOARDS': return texts.noBoards
+        case 'UNKNOWN_GYM': return texts.noSplit // a gym vanished between the two reads
+        default: return battleErrorText(result.error)
+      }
+    }
+    return texts.battleStarted(split.a.name, split.b.name)
   },
 
   async help() {

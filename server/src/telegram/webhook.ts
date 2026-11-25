@@ -15,7 +15,7 @@ import { COMMANDS } from './commands'
 import { hashCode, LINK_CODE_TTL_MS, newLinkCode } from './linking'
 import { texts } from './texts'
 
-export type TelegramDeps = Pick<Deps, 'config' | 'repos' | 'tokens' | 'now' | 'mondayFor' | 'pokeApiFor' | 'telegram'>
+export type TelegramDeps = Pick<Deps, 'config' | 'repos' | 'tokens' | 'now' | 'mondayFor' | 'pokeApiFor' | 'queue' | 'telegram'>
 
 /** The part of a Telegram Update we read. https://core.telegram.org/bots/api#update */
 interface TgUpdate {

@@ -1,6 +1,7 @@
 // What the bot says. Plain text (no Markdown), so names with * or _ can't break a message.
 import type { Pokemon, Status } from '@app/api/GameApi'
 import { MAX_ENERGY } from '@app/game/constants'
+import { battleErrorText } from '@app/lib/messages'
 
 const list = (names: string[]) => names.join(', ')
 
@@ -35,4 +36,14 @@ export const texts = {
   rested: (p: Pick<Pokemon, 'name' | 'level' | 'energy' | 'status'>) =>
     `${p.name} rested: Lv ${p.level} — ${p.status} — ⚡${p.energy}/${MAX_ENERGY}`,
   cantRest: (name: string, status: Status) => `${name} is ${status}. Only a Resting Pokémon can rest.`,
+
+  // battles (Task 15)
+  battleStarted: (a: string, b: string) => `⚔️ Battle started: ${a} vs ${b}… I'll send the result here.`,
+  battleFailed: (a: string, b: string, error: string) => `${a} vs ${b}: the battle couldn't run. ${failReason(error)}`,
 } as const
+
+function failReason(error: string): string {
+  if (error === 'A_NOT_ELIGIBLE' || error === 'B_NOT_ELIGIBLE' || error === 'SAME_GYM') return battleErrorText(error)
+  if (error === 'QUOTA') return 'The server reached its daily limit. Try again tomorrow.'
+  return 'Please try again in a minute.'
+}
