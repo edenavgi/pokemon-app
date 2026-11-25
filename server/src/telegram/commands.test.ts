@@ -73,8 +73,8 @@ describe('the command router', () => {
     for (const c of BOT_COMMANDS) expect(helpText()).toContain(`/${c.command}`)
   })
 
-  it('BOT_COMMANDS (the Telegram menu) has gyms, roster, train, rest, talk and help, in Telegram\'s format', () => {
-    expect(BOT_COMMANDS.map((c) => c.command)).toEqual(['gyms', 'roster', 'train', 'rest', 'talk', 'help'])
+  it('BOT_COMMANDS (the Telegram menu) has gyms, roster, train, rest, talk, battle and help, in Telegram\'s format', () => {
+    expect(BOT_COMMANDS.map((c) => c.command)).toEqual(['gyms', 'roster', 'train', 'rest', 'talk', 'battle', 'help'])
     for (const c of BOT_COMMANDS) {
       expect(c.command).toMatch(/^[a-z0-9_]{1,32}$/)
       expect(c.description.length).toBeGreaterThanOrEqual(1)

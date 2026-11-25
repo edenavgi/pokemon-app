@@ -23,6 +23,8 @@ import { applyBattleFatigue } from '@app/game/status'
 import type { Deps } from '../deps'
 import { QuotaError } from '../db/mongo'
 import { currentEvent } from '../log/wideEvent'
+import { TelegramError } from '../telegram/api'
+import { texts } from '../telegram/texts'
 
 export interface BattleDoc {
   _id: string // battleId
@@ -86,7 +88,7 @@ export function parseQueueBody(raw: string): BattleMessage {
 export type StartError = ArenaError | 'NOT_CONNECTED' | 'NO_BOARDS' | 'UNKNOWN_GYM'
 
 /** What the battle code needs from the outside world. */
-export type BattleDeps = Pick<Deps, 'repos' | 'now' | 'mondayFor' | 'pokeApiFor' | 'queue'>
+export type BattleDeps = Pick<Deps, 'repos' | 'now' | 'mondayFor' | 'pokeApiFor' | 'queue' | 'telegram'>
 
 /**
  * Checks the two gyms on the user's board, saves the battle as queued, THEN publishes the message —
@@ -142,6 +144,29 @@ export function battleSummaryText(doc: Pick<BattleDoc, 'gymA' | 'gymB' | 'outcom
   return [head, ...lines].join('\n')
 }
 
+/** 4xx from Telegram (except 429): the chat is gone or blocked the bot — sending again can't help. */
+function isPermanent(err: unknown): err is TelegramError {
+  return err instanceof TelegramError && err.status >= 400 && err.status < 500 && err.status !== 429
+}
+
+/**
+ * A battle started from Telegram reports back to its chat: the summary, or why it couldn't run.
+ * Sent once (resultSentAt). A temporary failure (5xx, 429, network) is thrown, so the queue retries;
+ * a permanent one is only logged, and the battle still ends.
+ */
+export async function onBattleDone(deps: BattleDeps, doc: BattleDoc): Promise<void> {
+  if (doc.source !== 'telegram' || !doc.chatId || doc.resultSentAt) return
+  const text = doc.error ? texts.battleFailed(doc.gymA.name, doc.gymB.name, doc.error) : battleSummaryText(doc)
+  try {
+    await deps.telegram.sendMessage(doc.chatId, text)
+    currentEvent()?.set({ resultSent: true })
+  } catch (err) {
+    if (!isPermanent(err)) throw err
+    currentEvent()?.set({ resultNotSent: err.message })
+  }
+  await deps.repos.battles.update(doc._id, { resultSentAt: deps.now() })
+}
+
 /** Turns are written in batches of this size while the battle runs. */
 const TURN_BATCH = 10
 
@@ -173,6 +198,7 @@ export async function runBattleMessage(deps: BattleDeps, msg: BattleMessage): Pr
       const [gymA, gymB] = await Promise.all([gateway.getGym(doc.gymA.id), gateway.getGym(doc.gymB.id)])
       const valid = validateArena(gymA, gymB) // the board may have changed since the request
       if (!valid.ok) {
+        await onBattleDone(deps, { ...doc, error: valid.error })
         await repos.battles.update(id, { status: 'failed', error: valid.error, finishedAt: deps.now() })
         return 'failed'
       }
@@ -226,6 +252,9 @@ export async function runBattleMessage(deps: BattleDeps, msg: BattleMessage): Pr
       await repos.battles.update(id, { updatePostedAt: deps.now() })
     }
 
+    // 5. Telegram battles: the result back to the chat (before 'done', so a failed send can be retried)
+    await onBattleDone(deps, { ...doc, outcome, kos })
+
     await repos.battles.update(id, { status: 'done', finishedAt: deps.now() })
     return 'done'
   } catch (err) {
@@ -233,6 +262,8 @@ export async function runBattleMessage(deps: BattleDeps, msg: BattleMessage): Pr
       // Retrying can't help before the daily quota resets
       await repos.battles.update(id, { status: 'failed', error: 'QUOTA', finishedAt: deps.now() }).catch(() => {})
       ev?.error(err)
+      // Best effort: the database is out of quota, so a retry can't record anything either
+      await onBattleDone(deps, { ...doc, error: 'QUOTA' }).catch((e) => ev?.set({ resultNotSent: String(e) }))
       return 'failed'
     }
     await repos.battles.release(id).catch(() => {}) // let the queue's retry claim it at once
