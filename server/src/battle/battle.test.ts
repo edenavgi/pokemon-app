@@ -5,7 +5,7 @@ import { TYPE_CHART } from '@app/api/mock/fixtures'
 import { simulateArena, type ArenaTurn } from '@app/game/arena'
 import { mulberry32 } from '@app/game/rng'
 import { battleErrorText } from '@app/lib/messages'
-import { fakeLogger, fakeSecureStorage, fakeTelegram, signSessionToken, testConfig, testDb } from '../../test/fakes'
+import { fakeLogger, fakeSecureStorage, fakeCardDeps, fakeTelegram, signSessionToken, testConfig, testDb } from '../../test/fakes'
 import { fakeMonday, fakeQueue } from '../../test/fakeMonday'
 import { createApp } from '../app'
 import { TokenStore } from '../auth/tokenStore'
@@ -56,7 +56,7 @@ async function setup({ connect = true, boards = true } = {}) {
     mondayFor: () => monday.request,
     pokeApiFor: () => pokeApi,
     queue,
-    telegram: fakeTelegram(),
+    telegram: fakeTelegram(), ...fakeCardDeps(),
   })
 
   /** Starts a battle as user 101 and returns its id. */
@@ -145,7 +145,7 @@ describe('POST /mndy-queue', () => {
     expect(summaryOnly.body).not.toHaveProperty('turns')
   })
 
-  it('applies energy −1 to every fighter that fought and Resting at 0; posts one update on the winner', async () => {
+  it('applies energy −1 to every fighter that fought and Resting at 0; posts the update on both gyms (winner and loser)', async () => {
     const { monday, repos, start, deliver } = await setup()
     monday.pokemon.get('p3')!.energy = 1 // Squirtle will drop to 0
     const { battleId } = await start()
@@ -156,8 +156,10 @@ describe('POST /mndy-queue', () => {
     expect(monday.pokemon.get('p2')!.energy).toBe(2) // Training: didn't fight, untouched
 
     const doc = (await repos.battles.get(battleId))!
-    const winnerId = doc.outcome!.winner === 'A' ? 'g1' : 'g2'
-    expect(monday.updates).toEqual([{ itemId: winnerId, body: battleSummaryText(doc) }])
+    expect(monday.updates).toEqual([
+      { itemId: 'g1', body: battleSummaryText(doc) },
+      { itemId: 'g2', body: battleSummaryText(doc) },
+    ])
   })
 
   it('handles a redelivered message once', async () => {
@@ -169,7 +171,7 @@ describe('POST /mndy-queue', () => {
 
     expect(second.status).toBe(200)
     expect(monday.writes.filter((w) => w.itemId === 'p1')).toHaveLength(1)
-    expect(monday.updates).toHaveLength(1)
+    expect(monday.updates).toHaveLength(2)
     expect(await repos.battleTurns.list(battleId)).toHaveLength(turns)
   })
 
@@ -185,7 +187,7 @@ describe('POST /mndy-queue', () => {
 
     expect((await deliver()).status).toBe(200) // the retry
     expect(monday.pokemon.get('p1')!.energy).toBe(2) // 3 → 2 once, from the snapshot
-    expect(monday.updates).toHaveLength(1)
+    expect(monday.updates).toHaveLength(2)
     expect((await repos.battles.get(battleId))!.status).toBe('done')
   })
 

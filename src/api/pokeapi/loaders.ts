@@ -96,6 +96,7 @@ const asPokeType = (name: string): PokeType | null => {
 
 // Same URL as pokemon/{n}.sprites.front_default, so the grid needs no request per Pokémon
 const SPRITES = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon'
+export const spriteUrl = (dexNumber: number) => `${SPRITES}/${dexNumber}.png`
 
 // The only Gen-1 slugs whose English name isn't the slug capitalized (as getSpecies shows them)
 const SPECIAL_NAMES: Record<string, string> = {
@@ -158,7 +159,7 @@ function toGen1(types: PokeApiType[]): SpeciesSummary[] {
       dexNumber,
       name: SPECIAL_NAMES[e.slug] ?? capitalize(e.slug),
       types: e.types.sort((a, b) => a.slot - b.slot).map((x) => x.type),
-      spriteUrl: `${SPRITES}/${dexNumber}.png`,
+      spriteUrl: spriteUrl(dexNumber),
     }))
 }
 

@@ -4,7 +4,10 @@ import type { Id } from '@app/api/GameApi'
 import { createPokeApi, fetchPokeApi, type PokeApi } from '@app/api/pokeapi/loaders'
 import { createMondayOAuth, type OAuthPort } from './auth/oauth'
 import { TokenStore } from './auth/tokenStore'
+import { sdkObjectStorage, type ObjectStoragePort } from './card/objectStorage'
+import { renderBattleCard, type CardInput } from './card/renderCard'
 import { mondayRequest, mondayRequestFor } from './monday/client'
+import { mondayFileUpload, type AddFileToUpdate } from './monday/files'
 import { loadConfig, type Config } from './config'
 import { connectDb, ensureIndexes, type Database } from './db/mongo'
 import { createRepos, type Repos } from './db/repos'
@@ -15,7 +18,6 @@ import { createTelegramApi, type TelegramPort } from './telegram/api'
 /**
  * Everything the app needs from the outside world. Routes receive it instead of
  * creating SDK clients themselves, so tests can pass fakes.
- * Later tasks add: objectStorage.
  */
 
 /** The part of the SDK Queue we use (monday code: Google Pub/Sub; locally: a POST to ourselves). */
@@ -41,6 +43,12 @@ export interface Deps {
   queue: QueuePort
   /** The Telegram Bot API (@eden_gym_bot) */
   telegram: TelegramPort
+  /** The battle card PNG (satori + resvg-wasm) — Task 16 */
+  renderCard: (input: CardInput) => Promise<Buffer>
+  /** monday code Object storage (the cards) */
+  objectStorage: ObjectStoragePort
+  /** monday's /v2/file upload as this user: add_file_to_update */
+  mondayFileFor: (userId: Id) => AddFileToUpdate
 }
 
 export const LOGGER_TAG = 'pokemon-server'
@@ -75,6 +83,9 @@ export async function createRealDeps(logger: LoggerPort = new Logger(LOGGER_TAG)
     deps: {
       config, logger, now, repos: createRepos(database.db, now), tokens, oauth, mondayWithToken,
       mondayFor, pokeApiFor, queue, telegram: createTelegramApi(config.telegramBotToken),
+      renderCard: (input) => renderBattleCard(input),
+      objectStorage: sdkObjectStorage(),
+      mondayFileFor: (userId) => mondayFileUpload(() => tokens.getAccessToken(userId)),
     },
     database,
   }

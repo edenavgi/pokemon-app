@@ -91,3 +91,39 @@ export function fakeTelegram() {
     setMyCommands: async () => {},
   }
 }
+
+/** Object storage in a Map (the real one: src/card/objectStorage.ts over the SDK). */
+export function fakeObjectStorage() {
+  const files = new Map<string, { content: Buffer; contentType: string }>()
+  let failUploads = false
+  return {
+    files,
+    failUploads: () => void (failUploads = true),
+    async upload(name: string, content: Buffer, contentType: string) {
+      if (failUploads) throw new Error('Object storage upload failed: OBJECT_STORAGE_BUCKET is not set (simulated)')
+      files.set(name, { content, contentType })
+    },
+    async download(name: string) {
+      return files.get(name) ?? null
+    },
+  }
+}
+
+/** add_file_to_update, recording what was attached (the real one: src/monday/files.ts). */
+export function fakeMondayFiles() {
+  const attached: { userId: string; updateId: string; file: Buffer; filename: string }[] = []
+  return {
+    attached,
+    mondayFileFor: (userId: string) => async (updateId: string, file: Buffer, filename: string) =>
+      void attached.push({ userId, updateId, file, filename }),
+  }
+}
+
+/** The card deps for tests that don't look at cards: a tiny fake PNG, storage and uploads that just record. */
+export function fakeCardDeps() {
+  return {
+    renderCard: async () => Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    objectStorage: fakeObjectStorage(),
+    mondayFileFor: fakeMondayFiles().mondayFileFor,
+  }
+}

@@ -2,6 +2,7 @@ import express, { Router, type RequestHandler } from 'express'
 import { battleErrorText } from '@app/lib/messages'
 import type { Session } from '../auth/sessionToken'
 import type { Deps } from '../deps'
+import { cardFileName } from '../card/objectStorage'
 import { withEvent, type WideEvent } from '../log/wideEvent'
 import {
   parseQueueBody, runBattleMessage, startBattle, toBattleView,
@@ -44,6 +45,18 @@ export function battleRoutes(deps: BattleDeps): Router {
     const limit = Math.min(Math.max(Number(req.query.limit) || 10, 1), MAX_LIST)
     const docs = user?.gymsBoardId ? await deps.repos.battles.recentForBoard(user.gymsBoardId, limit) : []
     res.json({ battles: docs.map(toBattleView) })
+  })
+
+  // The battle card PNG (Task 16), read back from Object storage. Same account only, like the battle.
+  router.get('/:id/card', async (req, res) => {
+    const { accountId } = res.locals.session as Session
+    const doc = await deps.repos.battles.get(req.params.id)
+    const file = doc && doc.accountId === accountId && doc.cardAt ? await deps.objectStorage.download(cardFileName(doc._id)) : null
+    if (!file) {
+      res.status(404).json({ error: 'NOT_FOUND' })
+      return
+    }
+    res.type('image/png').set('Cache-Control', 'private, max-age=86400').send(file.content)
   })
 
   // One battle; ?turns=1 adds the turns (the replay). Other accounts get 404, not 403: don't confirm it exists.

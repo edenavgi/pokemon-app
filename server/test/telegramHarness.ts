@@ -10,7 +10,7 @@ import { TokenStore } from '../src/auth/tokenStore'
 import type { Database } from '../src/db/mongo'
 import type { Deps } from '../src/deps'
 import { createRepos } from '../src/db/repos'
-import { fakeAccessToken, fakeLogger, fakeSecureStorage, signSessionToken, testConfig, testDb } from './fakes'
+import { fakeAccessToken, fakeLogger, fakeMondayFiles, fakeObjectStorage, fakeSecureStorage, signSessionToken, testConfig, testDb } from './fakes'
 import { fakeMonday, fakeQueue } from './fakeMonday'
 
 export const config = testConfig()
@@ -31,7 +31,7 @@ afterEach(async () => {
 })
 
 /** `pokeApiFor` replaces the fixture PokéAPI (Task 13 runs the real loaders over a fake fetch + cache). */
-export async function telegramSetup(opts: { pokeApiFor?: () => ReturnType<Deps['pokeApiFor']> } = {}) {
+export async function telegramSetup(opts: { pokeApiFor?: () => ReturnType<Deps['pokeApiFor']>; renderCard?: Deps['renderCard'] } = {}) {
   const log = fakeLogger()
   const database = await testDb()
   open.push(database)
@@ -47,6 +47,8 @@ export async function telegramSetup(opts: { pokeApiFor?: () => ReturnType<Deps['
   const tokens = new TokenStore(secure, oauth, now)
   const monday = fakeMonday()
   const queue = fakeQueue()
+  const objectStorage = fakeObjectStorage()
+  const files = fakeMondayFiles()
   let mondayRequests = 0
 
   /** A user who went through OAuth: token in Secure Storage + users doc (+ boards). */
@@ -69,9 +71,10 @@ export async function telegramSetup(opts: { pokeApiFor?: () => ReturnType<Deps['
   }
 
   const sent: { chatId: string; text: string }[] = []
+  const photos: { chatId: string; png: Buffer; caption: string }[] = []
   const telegram = {
     sendMessage: vi.fn(async (chatId: string, text: string) => void sent.push({ chatId, text })),
-    sendPhoto: vi.fn(async () => {}),
+    sendPhoto: vi.fn(async (chatId: string, png: Buffer, caption: string) => void photos.push({ chatId, png, caption })),
     setWebhook: vi.fn(async () => {}),
     setMyCommands: vi.fn(async () => {}),
   }
@@ -89,6 +92,9 @@ export async function telegramSetup(opts: { pokeApiFor?: () => ReturnType<Deps['
     pokeApiFor: opts.pokeApiFor ?? (() => ({ getMoveset: unused, getTypeChart: unused, getEvolution: async (dex: number) => EVOLUTIONS[dex], getSpecies })),
     queue,
     telegram,
+    renderCard: vi.fn(opts.renderCard ?? (async () => Buffer.from('card-png'))),
+    objectStorage,
+    mondayFileFor: files.mondayFileFor,
   }
   const app = createApp(deps)
 
@@ -117,7 +123,7 @@ export async function telegramSetup(opts: { pokeApiFor?: () => ReturnType<Deps['
 
   return {
     app, deps, database, repos, tokens, secure, telegram, sent, meCalls, log, connect, linkCode, say, repliesTo,
-    linkedChat, monday, queue, mondayRequests: () => mondayRequests,
+    linkedChat, monday, queue, objectStorage, attached: files.attached, photos, mondayRequests: () => mondayRequests,
     tick: (ms: number) => (t += ms),
     /** PokéAPI getSpecies fails from now on. */
     failSpecies: () => void (failSpecies = true),

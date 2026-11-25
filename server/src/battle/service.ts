@@ -18,12 +18,15 @@ import {
   eligibleFighters, simulateArena, toArenaTeam, validateArena,
   type ArenaError, type ArenaOutcome, type ArenaTeam, type ArenaTurn,
 } from '@app/game/arena'
+import { spriteUrl } from '@app/api/pokeapi/loaders'
 import { mulberry32 } from '@app/game/rng'
 import { applyBattleFatigue } from '@app/game/status'
 import type { Deps } from '../deps'
 import { QuotaError } from '../db/mongo'
 import { currentEvent } from '../log/wideEvent'
-import { TelegramError } from '../telegram/api'
+import { cardFileName } from '../card/objectStorage'
+import type { CardInput } from '../card/renderCard'
+import { CAPTION_MAX, TelegramError } from '../telegram/api'
 import { texts } from '../telegram/texts'
 
 export interface BattleDoc {
@@ -41,7 +44,7 @@ export interface BattleDoc {
   claimedAt?: Date
   /** Before the battle, saved once: what fought, with its Energy and status then. */
   snapshot?: {
-    pokemon: { id: Id; energy: number; status: Status }[]
+    pokemon: { id: Id; energy: number; status: Status; dex?: number }[] // dex: Task 16 (the MVP's sprite)
     teams: { a: ArenaTeam; b: ArenaTeam }
   }
   outcome?: ArenaOutcome
@@ -49,7 +52,10 @@ export interface BattleDoc {
   summary?: string
   boardAppliedAt?: Date
   updatePostedAt?: Date
+  updateIds?: Id[] // the updates posted in step 4 (the card is attached to them)
   resultSentAt?: Date // Task 15 (Telegram)
+  cardAt?: Date // Task 16: the card is in Object storage and attached to the updates
+  cardError?: string // Task 16: why there is no card (best effort: the battle still ends)
   error?: string
   createdAt: Date
   finishedAt?: Date
@@ -88,7 +94,8 @@ export function parseQueueBody(raw: string): BattleMessage {
 export type StartError = ArenaError | 'NOT_CONNECTED' | 'NO_BOARDS' | 'UNKNOWN_GYM'
 
 /** What the battle code needs from the outside world. */
-export type BattleDeps = Pick<Deps, 'repos' | 'now' | 'mondayFor' | 'pokeApiFor' | 'queue' | 'telegram'>
+export type BattleDeps = Pick<Deps,
+  'repos' | 'now' | 'mondayFor' | 'pokeApiFor' | 'queue' | 'telegram' | 'renderCard' | 'objectStorage' | 'mondayFileFor'>
 
 /**
  * Checks the two gyms on the user's board, saves the battle as queued, THEN publishes the message —
@@ -154,17 +161,81 @@ function isPermanent(err: unknown): err is TelegramError {
  * Sent once (resultSentAt). A temporary failure (5xx, 429, network) is thrown, so the queue retries;
  * a permanent one is only logged, and the battle still ends.
  */
-export async function onBattleDone(deps: BattleDeps, doc: BattleDoc): Promise<void> {
+export async function onBattleDone(
+  deps: Pick<BattleDeps, 'repos' | 'now' | 'telegram'>, doc: BattleDoc, card?: Buffer,
+): Promise<void> {
   if (doc.source !== 'telegram' || !doc.chatId || doc.resultSentAt) return
+  const chatId = doc.chatId
   const text = doc.error ? texts.battleFailed(doc.gymA.name, doc.gymB.name, doc.error) : battleSummaryText(doc)
   try {
-    await deps.telegram.sendMessage(doc.chatId, text)
+    // Task 16: the card with the summary as its caption, in one message (a caption holds 1024 characters:
+    // a longer summary goes as the photo with its first line, then the full text)
+    let sent = false
+    if (card && !doc.error) {
+      try {
+        const fits = text.length <= CAPTION_MAX
+        await deps.telegram.sendPhoto(chatId, card, fits ? text : text.split('\n')[0])
+        if (!fits) await deps.telegram.sendMessage(chatId, text)
+        sent = true
+      } catch (err) {
+        if (!isPermanent(err)) throw err
+        currentEvent()?.set({ photoNotSent: err.message }) // e.g. Telegram can't read the image → the text
+      }
+    }
+    if (!sent) await deps.telegram.sendMessage(chatId, text)
     currentEvent()?.set({ resultSent: true })
   } catch (err) {
     if (!isPermanent(err)) throw err
     currentEvent()?.set({ resultNotSent: err.message })
   }
   await deps.repos.battles.update(doc._id, { resultSentAt: deps.now() })
+}
+
+/** What the card shows: names, winner, turns and the MVP (its sprite from the snapshot's dex number). */
+function cardInput(doc: BattleDoc, outcome: ArenaOutcome, pokemon: { id: Id; dex?: number }[]): CardInput {
+  const dex = outcome.mvp ? pokemon.find((p) => p.id === outcome.mvp!.id)?.dex : undefined
+  return {
+    gymA: doc.gymA.name,
+    gymB: doc.gymB.name,
+    winner: outcome.winner === 'draw' ? null : (outcome.winner === 'A' ? doc.gymA : doc.gymB).name,
+    turns: outcome.turnCount,
+    mvp: outcome.mvp ? { name: outcome.mvp.name, ...(dex ? { spriteUrl: spriteUrl(dex) } : {}) } : null,
+  }
+}
+
+/**
+ * Task 16, best effort: draw the card once, store it (cards/<id>.png), attach it to the posted updates.
+ * Returns the PNG for Telegram (a retry reads the stored one back). Never throws: any failure is
+ * cardError on the event and the battle, and the battle goes on without a card.
+ */
+async function battleCard(deps: BattleDeps, doc: BattleDoc, outcome: ArenaOutcome, pokemon: { id: Id; dex?: number }[], updateIds: Id[]): Promise<Buffer | undefined> {
+  const ev = currentEvent()
+  const wantPhoto = doc.source === 'telegram' && !doc.resultSentAt
+  if (doc.cardError) return undefined // it failed before: don't try again on a retry
+  if (doc.cardAt) return wantPhoto ? ((await deps.objectStorage.download(cardFileName(doc._id)).catch(() => null))?.content) : undefined
+
+  let png: Buffer | undefined
+  const fail = async (err: unknown) => {
+    const cardError = err instanceof Error ? err.message : String(err)
+    ev?.set({ cardError })
+    await deps.repos.battles.update(doc._id, { cardError }).catch(() => {})
+  }
+  try {
+    png = await deps.renderCard(cardInput(doc, outcome, pokemon))
+    ev?.set({ cardBytes: png.length })
+  } catch (err) {
+    await fail(err)
+    return undefined
+  }
+  try {
+    await deps.objectStorage.upload(cardFileName(doc._id), png, 'image/png')
+    const addFile = deps.mondayFileFor(doc.userId)
+    for (const updateId of updateIds) await addFile(updateId, png, `battle-${doc._id}.png`)
+    await deps.repos.battles.update(doc._id, { cardAt: deps.now() })
+  } catch (err) {
+    await fail(err) // the PNG itself is fine: Telegram can still have it
+  }
+  return png
 }
 
 /** Turns are written in batches of this size while the battle runs. */
@@ -206,7 +277,7 @@ export async function runBattleMessage(deps: BattleDeps, msg: BattleMessage): Pr
       const dexes = [...new Set(fighters.map((p) => p.dexNumber))]
       const movesets = new Map(await Promise.all(dexes.map(async (dex) => [dex, await pokeApi.getMoveset(dex)] as const)))
       snapshot = {
-        pokemon: fighters.map((p) => ({ id: p.id, energy: p.energy, status: p.status })),
+        pokemon: fighters.map((p) => ({ id: p.id, energy: p.energy, status: p.status, dex: p.dexNumber })),
         teams: { a: toArenaTeam(gymA, movesets), b: toArenaTeam(gymB, movesets) },
       }
       await repos.battles.update(id, { snapshot })
@@ -245,15 +316,19 @@ export async function runBattleMessage(deps: BattleDeps, msg: BattleMessage): Pr
       ev?.set({ boardChanges: patches.length })
     }
 
-    // 4. The update on the winning gym's item (both on a draw)
+    // 4. The update on both gyms' items, winner and loser (Eden, Task 16)
+    let updateIds = doc.updateIds ?? []
     if (!doc.updatePostedAt) {
-      const items = outcome.winner === 'A' ? [doc.gymA.id] : outcome.winner === 'B' ? [doc.gymB.id] : [doc.gymA.id, doc.gymB.id]
-      for (const itemId of items) await gateway.postUpdate(itemId, summary)
-      await repos.battles.update(id, { updatePostedAt: deps.now() })
+      updateIds = []
+      for (const itemId of [doc.gymA.id, doc.gymB.id]) updateIds.push((await gateway.postUpdate(itemId, summary)).updateId)
+      await repos.battles.update(id, { updatePostedAt: deps.now(), updateIds })
     }
 
-    // 5. Telegram battles: the result back to the chat (before 'done', so a failed send can be retried)
-    await onBattleDone(deps, { ...doc, outcome, kos })
+    // 5. The card (Task 16, best effort): Object storage + attached to those updates
+    const card = await battleCard(deps, doc, outcome, snapshot.pokemon, updateIds)
+
+    // 6. Telegram battles: the result back to the chat (before 'done', so a failed send can be retried)
+    await onBattleDone(deps, { ...doc, outcome, kos }, card)
 
     await repos.battles.update(id, { status: 'done', finishedAt: deps.now() })
     return 'done'

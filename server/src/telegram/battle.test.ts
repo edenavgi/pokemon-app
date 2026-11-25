@@ -23,8 +23,11 @@ const pokeApi = () => ({
   getSpecies: async () => { throw new Error('not used in battles') },
 })
 
+// These tests check the text messages (Task 15), so no card is drawn here; the card path: src/card/card.test.ts
+const noCard = async (): Promise<Buffer> => { throw new Error('no card in the Task 15 tests') }
+
 async function setup() {
-  const s = await telegramSetup({ pokeApiFor: pokeApi })
+  const s = await telegramSetup({ pokeApiFor: pokeApi, renderCard: noCard })
   await s.linkedChat('555', '101')
   /** What monday code does with a queue message: POST it to /mndy-queue with the secret. */
   const deliver = (body = s.queue.published.at(-1)!) =>
@@ -133,7 +136,7 @@ describe('/battle', () => {
     const doc = (await repos.battles.get(battleId()))!
     expect(doc.status).toBe('done')
     expect(repliesTo('555').slice(1)).toEqual([battleSummaryText(doc)])
-    expect(monday.updates).toHaveLength(1) // the board part was not done twice
+    expect(monday.updates).toHaveLength(2) // one per gym, not done twice
   })
 
   it('a permanent Telegram failure (user blocked the bot) → logged, battle done, no retry', async () => {
